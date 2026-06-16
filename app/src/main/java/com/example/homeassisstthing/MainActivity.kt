@@ -202,6 +202,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var haClient: HomeAssistantClient
 
+    // Friendly names for entity states
     private fun formatDeviceState(entityId: String, rawState: String, domain: String): String {
         val upperState = rawState.uppercase().trim()
 
@@ -272,6 +273,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Brightness control
     private fun setWindowBrightness(brightness: Float) {
         val layoutParams = window.attributes
         layoutParams.screenBrightness = brightness
@@ -296,7 +298,7 @@ class MainActivity : ComponentActivity() {
         windowInsetsController.systemBarsBehavior =
             androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
-        // Hide both the notification (status) bar and the navigation bar completely
+        // Hide both the notification bar and the navigation bar completely
         windowInsetsController.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
 
         setContent {
@@ -324,7 +326,7 @@ class MainActivity : ComponentActivity() {
             val activeTimersMinutesMap = remember { mutableStateMapOf<String, Int>() }
             val timerRemainingSecondsMap = remember { mutableStateMapOf<String, Int>() }
 
-            //provides home assistant ip to websocket
+            //Remember HA IP
             var haIpAddress by rememberSaveable {
                 mutableStateOf(
                     sharedPrefs.getString(
@@ -334,7 +336,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            //Provides long life access token to websocket
+            //Remember access token
             var haAccessToken by rememberSaveable {
                 mutableStateOf(
                     sharedPrefs.getString(
@@ -344,6 +346,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
+            //Remember selected theme
             var selectedThemeMode by rememberSaveable {
                 mutableStateOf(
                     sharedPrefs.getInt(
@@ -352,6 +355,7 @@ class MainActivity : ComponentActivity() {
                     )
                 )
             }
+            //Remember keep awake setting
             var keepScreenAwake by rememberSaveable {
                 mutableStateOf(
                     sharedPrefs.getBoolean(
@@ -360,6 +364,7 @@ class MainActivity : ComponentActivity() {
                     )
                 )
             }
+            // Remember sleep timer setting
             var enableSleepTimer by rememberSaveable {
                 mutableStateOf(
                     sharedPrefs.getBoolean(
@@ -368,6 +373,7 @@ class MainActivity : ComponentActivity() {
                     )
                 )
             }
+            //Remember screen burn in setting
             var enableBurnInProtection by rememberSaveable {
                 mutableStateOf(
                     sharedPrefs.getBoolean(
@@ -376,6 +382,7 @@ class MainActivity : ComponentActivity() {
                     )
                 )
             }
+            //Remember screen time out duration
             var wakeDurationMinutes by rememberSaveable {
                 mutableStateOf(
                     sharedPrefs.getFloat(
@@ -385,6 +392,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
+            //Remember time set for screen black out on
             var sleepHour by rememberSaveable {
                 mutableStateOf(
                     sharedPrefs.getInt(
@@ -401,6 +409,7 @@ class MainActivity : ComponentActivity() {
                     )
                 )
             }
+            //Remember time set for screen black out off
             var wakeHour by rememberSaveable { mutableStateOf(sharedPrefs.getInt("wake_hour", 6)) }
             var wakeMinute by rememberSaveable {
                 mutableStateOf(
@@ -508,6 +517,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // Get IP of Device
             val getLocalIpAddress = {
                 try {
                     val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
@@ -528,6 +538,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            //Ping test to HA Machine
             val runNetworkDiagnosticPing = {
                 diagnosticPingResult = "TESTING LINK..."
                 lifecycleScope.launch(Dispatchers.IO) {
@@ -553,7 +564,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            //connection to home assistant
+            //Connection to home assistant
             val initializeAndConnectHA = { targetIp: String, targetToken: String ->
                 try {
                     if (::haClient.isInitialized) {
@@ -625,7 +636,7 @@ class MainActivity : ComponentActivity() {
                                         val stateValue = newStateObj.optString("state").uppercase()
                                         val attributes = newStateObj.optJSONObject("attributes")
 
-                                        // FIX: Use optDouble instead of optInt to read the decimal values safely
+
                                         val currentBright =
                                             attributes?.optDouble("brightness", -1.0) ?: -1.0
                                         val updatedBrightness = if (currentBright != -1.0) {
@@ -651,6 +662,7 @@ class MainActivity : ComponentActivity() {
                 haClient.connect()
             }
 
+            //Connection retry
             LaunchedEffect(Unit) {
                 while (true) {
                     if (connectionStatus == "Disconnected" || connectionStatus.contains("Failed")) {
@@ -677,6 +689,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            //Burn in protection, moves pixels randomly
             LaunchedEffect(enableBurnInProtection) {
                 if (enableBurnInProtection) {
                     while (true) {
@@ -690,6 +703,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            //Screen blackout
             LaunchedEffect(
                 lastInteractionTime,
                 wakeDurationMinutes,
@@ -712,6 +726,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            //Keep screen on
             LaunchedEffect(keepScreenAwake) {
                 if (keepScreenAwake) {
                     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -720,6 +735,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            //screen black out
             LaunchedEffect(
                 enableSleepTimer,
                 sleepHour,
@@ -786,7 +802,7 @@ class MainActivity : ComponentActivity() {
             //val neonGreen = Color(0xFF00FF66)
             //val textMuted = Color(0xFF7E8494)
 
-            // 🎯 DEFAULT SELECTION: Set to Index 6 to make Android Material the default skin
+            //  Remember Theme state. Default 6 android theme
             var selectedThemeId by rememberSaveable { mutableStateOf(6) }
 
             // =================================================================
@@ -820,14 +836,14 @@ class MainActivity : ComponentActivity() {
 
             val menuItems = listOf(
                 activeThemeColors.menuDashboardLabel,
-                "LIGHTS MATRIX",
-                "CLIMATE NODE",
-                "SECURITY VAULT",
+                "LIGHTS",
+                "CLIMATE",
+                "SECURITY",
                 activeThemeColors.menuSettingsLabel
             )
 
             // =================================================================
-            // MAIN LAYOUT TREE
+            // MAIN MENU LAYOUT TREE
             // =================================================================
             MaterialTheme {
                 ModalNavigationDrawer(
@@ -850,8 +866,8 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
                                     Column {
-                                        Text("CHASSIS MATRIX NODE", color = textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                                        Text("NAV CONTROL", color = neonCyan, fontSize = 20.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                                        Text("Main Menu", color = textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                        Text("HOUSE CONTROL", color = neonCyan, fontSize = 20.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
                                     }
 
                                     HorizontalDivider(color = textMuted.copy(alpha = 0.2f), thickness = 1.dp)
@@ -895,7 +911,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) {
-                    //at this bit??
+
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -939,6 +955,7 @@ class MainActivity : ComponentActivity() {
                                         animationSpec = infiniteRepeatable(animation = tween(1500, easing = androidx.compose.animation.core.FastOutSlowInEasing), repeatMode = androidx.compose.animation.core.RepeatMode.Reverse), label = ""
                                     )
 
+                                    //menu button
                                     Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) {
                                         Row(
                                             modifier = Modifier
@@ -967,6 +984,7 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.align(Alignment.Center)
                                         )
 
+                                        // Connection status indicator
                                         Row(
                                             modifier = Modifier.align(Alignment.CenterEnd),
                                             verticalAlignment = Alignment.CenterVertically,
@@ -1058,7 +1076,7 @@ class MainActivity : ComponentActivity() {
                                                     ) {
 
                                                         Text(
-                                                            "DYNAMIC MACRO ACTIONS",
+                                                            "QUICK ACTIONS",
                                                             color = textMuted,
                                                             fontSize = 10.sp,
                                                             fontFamily = FontFamily.Monospace,
@@ -1071,6 +1089,7 @@ class MainActivity : ComponentActivity() {
                                                                 .padding(bottom = 16.dp),
                                                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                                                         ) {
+                                                            //Macro buttons
                                                             Button(
                                                                 onClick = {
                                                                     triggerInterfaceFeedback()
@@ -1138,6 +1157,7 @@ class MainActivity : ComponentActivity() {
                                                             }
                                                         }
 
+                                                        //carosell, wants changing
                                                         Card(
                                                             modifier = Modifier.fillMaxWidth()
                                                                 .height(160.dp),
@@ -1262,6 +1282,7 @@ class MainActivity : ComponentActivity() {
                                                             }
                                                         }
 
+                                                        //Screen Blackout button. Want this moving to the bottom of every tab
                                                         Spacer(modifier = Modifier.height(16.dp))
 
                                                         OutlinedButton(
@@ -1295,7 +1316,7 @@ class MainActivity : ComponentActivity() {
                                                                         )
                                                                 )
                                                                 Text(
-                                                                    "BLACKOUT SCREEN",
+                                                                    "SCREEN OFF",
                                                                     color = neonCyan,
                                                                     fontSize = 12.sp,
                                                                     fontWeight = FontWeight.Bold,
@@ -1308,18 +1329,18 @@ class MainActivity : ComponentActivity() {
                                                 }
 
                                             // ---------------------------------------------------------
-                                            // INDEX 01 // LIGHTING MATRICES PANEL VIEW
+                                            // INDEX 01 // LIGHTING  PANEL VIEW
                                             // ---------------------------------------------------------
                                             1 -> {
                                                 val lightDevices =
                                                     deviceList.filter { it.domain == "light" }
 
-                                                // Using a standard conditional check avoids the @Composable context alignment errors entirely
+
                                                 if (activeDetailedLight == null) {
-                                                    // VIEW A: THE STANDARD SCROLLING LIGHTING MATRIX
+                                                    // VIEW A: THE STANDARD LIGHTING LIST AND ON OFF CONTROL
                                                     Column(modifier = Modifier.fillMaxSize()) {
                                                         Text(
-                                                            "LIGHTING MATRICES (${lightDevices.size})",
+                                                            "LIGHT CONTROLS (${lightDevices.size})",
                                                             color = textMuted,
                                                             fontSize = 11.sp,
                                                             fontFamily = FontFamily.Monospace,
@@ -1463,7 +1484,7 @@ class MainActivity : ComponentActivity() {
                                                         )
                                                     }
 
-                                                    // Use the hoisted background map tracking positions instead of local variables
+                                                    // Use hoisted background map tracking positions instead of local variables
                                                     val currentTimerMins =
                                                         activeTimersMinutesMap[liveLight.entityId] ?: 0
                                                     val currentRemainingSecs =
@@ -1488,7 +1509,7 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                     }
 
-                                                    // Upgraded Flood-Proof Debouncer for RGBW Sliders
+                                                    // Flood prevention on rgb sliders
                                                     var lastSentRgb by remember(liveLight.entityId) {
                                                         mutableStateOf(
                                                             Triple(255, 255, 255)
@@ -1560,7 +1581,7 @@ class MainActivity : ComponentActivity() {
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
                                                             Text(
-                                                                "← BACK TO MATRIX",
+                                                                "← BACK",
                                                                 color = neonCyan,
                                                                 fontWeight = FontWeight.Bold,
                                                                 fontFamily = FontFamily.Monospace,
@@ -1606,7 +1627,7 @@ class MainActivity : ComponentActivity() {
                                                                 // Identity Header Segment
                                                                 Column {
                                                                     Text(
-                                                                        "DEVICE TUNING COCKPIT",
+                                                                        "ADVANCED LIGHT CONTROLS",
                                                                         color = neonCyan,
                                                                         fontSize = 10.sp,
                                                                         fontFamily = FontFamily.Monospace,
@@ -1648,7 +1669,7 @@ class MainActivity : ComponentActivity() {
                                                                     contentAlignment = Alignment.Center
                                                                 ) {
                                                                     Text(
-                                                                        text = if (currentRemainingSecs > 0) "SYSTEM DECAY SEQUENCE INITIATED" else if (isLightOn) "SYSTEM INFRASTRUCTURE: ACTIVE" else "SYSTEM INFRASTRUCTURE: STANDBY",
+                                                                        text = if (currentRemainingSecs > 0) "SLEEP TIMER STARTED" else if (isLightOn) "LIGHT ON" else "LIGHT OFF",
                                                                         color = if (currentRemainingSecs > 0) neonCyan else if (isLightOn) neonGreen else textMuted,
                                                                         fontSize = 11.sp,
                                                                         fontWeight = FontWeight.Bold,
@@ -1656,7 +1677,7 @@ class MainActivity : ComponentActivity() {
                                                                     )
                                                                 }
 
-                                                                // TOP POSITION 2: Global Command Toggle Switch (MOVED UP TO THE TOP!)
+                                                                // TOP POSITION 2: On off switch
                                                                 Button(
                                                                     onClick = {
                                                                         triggerInterfaceFeedback()
@@ -1693,7 +1714,7 @@ class MainActivity : ComponentActivity() {
                                                                     )
                                                                 ) {
                                                                     Text(
-                                                                        text = if (isLightOn) "POWER COMMAND: KILL TARGET" else "POWER COMMAND: ENGAGE TARGET",
+                                                                        text = if (isLightOn) "POWER COMMAND: OFF" else "POWER COMMAND: ON",
                                                                         color = if (isLightOn) neonGreen else textMuted,
                                                                         fontWeight = FontWeight.Bold,
                                                                         fontFamily = FontFamily.Monospace,
@@ -1717,7 +1738,7 @@ class MainActivity : ComponentActivity() {
                                                                         horizontalArrangement = Arrangement.SpaceBetween
                                                                     ) {
                                                                         Text(
-                                                                            "SYSTEM INTENSITY LEVEL",
+                                                                            "LIGHT BRIGHTNESS CONTROL",
                                                                             color = if (isLightOn) neonCyan else textMuted,
                                                                             fontSize = 11.sp,
                                                                             fontFamily = FontFamily.Monospace,
@@ -1783,17 +1804,17 @@ class MainActivity : ComponentActivity() {
 
                                                                         val colorTemps = listOf(
                                                                             Triple(
-                                                                                "CRISP COLD",
+                                                                                "COLD WHITE",
                                                                                 153,
                                                                                 Color(0xFFDDF2FF)
                                                                             ),
                                                                             Triple(
-                                                                                "BALACTIVE",
+                                                                                "BALANCE",
                                                                                 300,
                                                                                 Color(0xFFFFFFFE)
                                                                             ),
                                                                             Triple(
-                                                                                "WARM AMBER",
+                                                                                "WARM WHITE",
                                                                                 450,
                                                                                 Color(0xFFFFE3A6)
                                                                             )
@@ -1886,7 +1907,7 @@ class MainActivity : ComponentActivity() {
                                                                             .padding(14.dp)
                                                                     ) {
                                                                         Text(
-                                                                            "SLEEP RUNTIME",
+                                                                            "SLEEP TIMER",
                                                                             color = if (isLightOn) neonCyan else textMuted,
                                                                             fontSize = 11.sp,
                                                                             fontFamily = FontFamily.Monospace,
@@ -1967,7 +1988,7 @@ class MainActivity : ComponentActivity() {
                                                                                                 currentRemainingSecs % 60
                                                                                             "CANCEL (${mins}m ${secs}s)"
                                                                                         } else {
-                                                                                            "KILL IN $minutes MIN"
+                                                                                            "OFF IN $minutes MIN"
                                                                                         }
 
                                                                                     Text(
@@ -2000,7 +2021,7 @@ class MainActivity : ComponentActivity() {
                                                                     )
                                                                 ) {
                                                                     Text(
-                                                                        "CHROMATIC RGBW EMISSION PROFILE",
+                                                                        "RBG CONTROL",
                                                                         color = if (isLightOn) neonCyan else textMuted,
                                                                         fontSize = 11.sp,
                                                                         fontFamily = FontFamily.Monospace,
@@ -2227,14 +2248,14 @@ class MainActivity : ComponentActivity() {
                                                         ) {
                                                             Column(modifier = Modifier.padding(16.dp)) {
                                                                 Text(
-                                                                    text = "01 // SELECT INTERFACE PROFILE SKIN",
+                                                                    text = "SYSTEM THEME",
                                                                     color = neonCyan,
                                                                     fontSize = 11.sp,
                                                                     fontFamily = FontFamily.Monospace,
                                                                     fontWeight = FontWeight.Bold
                                                                 )
                                                                 Text(
-                                                                    text = "Hot-swap system design layouts across all active nodes.",
+                                                                    text = "Choose theme for how the panel looks",
                                                                     color = textMuted,
                                                                     fontSize = 10.sp,
                                                                     modifier = Modifier.padding(bottom = 16.dp)
@@ -2331,7 +2352,7 @@ class MainActivity : ComponentActivity() {
                                                         ) {
                                                             Column(modifier = Modifier.padding(16.dp)) {
                                                                 Text(
-                                                                    text = "INTERACTIVE MACRO ASSIGNMENTS",
+                                                                    text = "MACRO CUSTOMASIZATION",
                                                                     color = neonCyan,
                                                                     fontSize = 11.sp,
                                                                     fontWeight = FontWeight.Bold,
@@ -2590,7 +2611,7 @@ class MainActivity : ComponentActivity() {
                                                         ) {
                                                             Column(modifier = Modifier.padding(16.dp)) {
                                                                 Text(
-                                                                    text = "SERVER NODE CONNECTION CONFIGURATION",
+                                                                    text = "SERVER CONNECTION CONFIGURATION",
                                                                     color = neonCyan,
                                                                     fontSize = 11.sp,
                                                                     fontWeight = FontWeight.Bold,
@@ -2694,7 +2715,7 @@ class MainActivity : ComponentActivity() {
                                                                     )
                                                                 ) {
                                                                     Text(
-                                                                        "APPLY & RE-BOOT COMS LINK",
+                                                                        "APPLY & RE-CONNECT",
                                                                         color = neonCyan,
                                                                         fontSize = 11.sp,
                                                                         fontWeight = FontWeight.Bold,
