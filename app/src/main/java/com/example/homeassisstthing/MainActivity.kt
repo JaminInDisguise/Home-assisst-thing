@@ -325,6 +325,7 @@ class MainActivity : ComponentActivity() {
             // maps to keep track of timers across ALL lights even when switching views!
             val activeTimersMinutesMap = remember { mutableStateMapOf<String, Int>() }
             val timerRemainingSecondsMap = remember { mutableStateMapOf<String, Int>() }
+            val timerTargetEpochMap = remember { mutableStateMapOf<String, Long>() }
 
             //Remember HA IP
             var haIpAddress by rememberSaveable {
@@ -1461,12 +1462,34 @@ class MainActivity : ComponentActivity() {
                                                         )
                                                     }
 
-                                                    // Use hoisted background map tracking positions instead of local variables
-                                                    val currentTimerMins =
-                                                        activeTimersMinutesMap[liveLight.entityId] ?: 0
-                                                    val currentRemainingSecs =
-                                                        timerRemainingSecondsMap[liveLight.entityId]
-                                                            ?: 0
+                                                    // track which timer duration button is active (15, 30, 45)
+                                                    val currentTimerMins = activeTimersMinutesMap[liveLight.entityId] ?: 0
+
+                                                    // Track a ticking state locally just to force the UI text to update every second while looking at it
+                                                    var localTickTrigger by remember { mutableStateOf(0) }
+                                                    LaunchedEffect(currentTimerMins) {
+                                                        if (currentTimerMins > 0) {
+                                                            while (true) {
+                                                                delay(1000)
+                                                                localTickTrigger++
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // Calculate remaining seconds dynamically by comparing the target timestamp to current system time
+                                                    val currentRemainingSecs = remember(liveLight.entityId, localTickTrigger) {
+                                                        val targetEpoch = timerTargetEpochMap[liveLight.entityId] ?: 0L
+                                                        val currentEpoch = System.currentTimeMillis() / 1000
+                                                        (targetEpoch - currentEpoch).coerceAtLeast(0L)
+                                                    }
+
+                                                    // Auto-clean maps if time runs out naturally while looking at it
+                                                    LaunchedEffect(currentRemainingSecs) {
+                                                        if (currentTimerMins > 0 && currentRemainingSecs == 0L) {
+                                                            activeTimersMinutesMap[liveLight.entityId] = 0
+                                                            timerTargetEpochMap[liveLight.entityId] = 0L
+                                                        }
+                                                    }
 
                                                     // Synchronize intensity slider live from external websocket events
                                                     LaunchedEffect(liveLight.brightness) {
@@ -1514,30 +1537,6 @@ class MainActivity : ComponentActivity() {
                                                                 )
                                                                 lastSentRgb = currentTriple
                                                             }
-                                                        }
-                                                    }
-
-                                                    // Hoisted countdown background thread loop handler
-                                                    LaunchedEffect(currentRemainingSecs, isLightOn) {
-                                                        if (currentRemainingSecs > 0 && isLightOn) {
-                                                            delay(1000)
-                                                            timerRemainingSecondsMap[liveLight.entityId] =
-                                                                currentRemainingSecs - 1
-                                                            if (timerRemainingSecondsMap[liveLight.entityId] == 0) {
-                                                                activeTimersMinutesMap[liveLight.entityId] =
-                                                                    0
-                                                                if (::haClient.isInitialized) {
-                                                                    haClient.toggleLight(
-                                                                        liveLight.entityId,
-                                                                        false
-                                                                    )
-                                                                }
-                                                            }
-                                                        } else if (!isLightOn) {
-                                                            activeTimersMinutesMap[liveLight.entityId] =
-                                                                0
-                                                            timerRemainingSecondsMap[liveLight.entityId] =
-                                                                0
                                                         }
                                                     }
 
@@ -1876,9 +1875,7 @@ class MainActivity : ComponentActivity() {
                                                                         modifier = Modifier
                                                                             .weight(1f)
                                                                             .background(
-                                                                                currentBgColor.copy(
-                                                                                    alpha = 0.3f
-                                                                                ),
+                                                                                currentBgColor.copy(alpha = 0.3f),
                                                                                 RoundedCornerShape(12.dp)
                                                                             )
                                                                             .padding(14.dp)
@@ -1891,82 +1888,55 @@ class MainActivity : ComponentActivity() {
                                                                             fontWeight = FontWeight.Bold
                                                                         )
 
-                                                                        Spacer(
-                                                                            modifier = Modifier.height(
-                                                                                10.dp
-                                                                            )
-                                                                        )
+                                                                        Spacer(modifier = Modifier.height(10.dp))
 
-                                                                        val timeOptions =
-                                                                            listOf(15, 30, 45)
-                                                                        Column(
-                                                                            verticalArrangement = Arrangement.spacedBy(
-                                                                                8.dp
-                                                                            )
-                                                                        ) {
+                                                                        val timeOptions = listOf(15, 30, 45)
+                                                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                                                             timeOptions.forEach { minutes ->
-                                                                                val isCurrentTimer =
-                                                                                    currentTimerMins == minutes
+                                                                                val isCurrentTimer = currentTimerMins == minutes
                                                                                 Row(
                                                                                     modifier = Modifier
                                                                                         .fillMaxWidth()
                                                                                         .height(36.dp)
                                                                                         .background(
-                                                                                            if (!isLightOn) textMuted.copy(
-                                                                                                alpha = 0.05f
-                                                                                            )
-                                                                                            else if (isCurrentTimer) neonGreen.copy(
-                                                                                                alpha = 0.15f
-                                                                                            )
-                                                                                            else neonCyan.copy(
-                                                                                                alpha = 0.05f
-                                                                                            ),
-                                                                                            RoundedCornerShape(
-                                                                                                6.dp
-                                                                                            )
+                                                                                            if (!isLightOn) textMuted.copy(alpha = 0.05f)
+                                                                                            else if (isCurrentTimer) neonGreen.copy(alpha = 0.15f)
+                                                                                            else neonCyan.copy(alpha = 0.05f),
+                                                                                            RoundedCornerShape(6.dp)
                                                                                         )
                                                                                         .border(
                                                                                             1.dp,
                                                                                             if (isCurrentTimer) neonGreen else Color.Transparent,
-                                                                                            RoundedCornerShape(
-                                                                                                6.dp
-                                                                                            )
+                                                                                            RoundedCornerShape(6.dp)
                                                                                         )
-                                                                                        .clickable(
-                                                                                            enabled = isLightOn
-                                                                                        ) {
+                                                                                        .clickable(enabled = isLightOn) {
                                                                                             triggerInterfaceFeedback()
                                                                                             if (isCurrentTimer) {
-                                                                                                activeTimersMinutesMap[liveLight.entityId] =
-                                                                                                    0
-                                                                                                timerRemainingSecondsMap[liveLight.entityId] =
-                                                                                                    0
+                                                                                                // CANCEL ACTION
+                                                                                                activeTimersMinutesMap[liveLight.entityId] = 0
+                                                                                                timerTargetEpochMap[liveLight.entityId] = 0L
                                                                                             } else {
-                                                                                                activeTimersMinutesMap[liveLight.entityId] =
-                                                                                                    minutes
-                                                                                                timerRemainingSecondsMap[liveLight.entityId] =
-                                                                                                    minutes * 60
+                                                                                                // START TIMER ACTION
+                                                                                                val futureTargetEpoch = (System.currentTimeMillis() / 1000) + (minutes * 60)
+
+                                                                                                activeTimersMinutesMap[liveLight.entityId] = minutes
+                                                                                                timerTargetEpochMap[liveLight.entityId] = futureTargetEpoch
+
                                                                                                 if (::haClient.isInitialized) {
-                                                                                                    haClient.startSleepTimer(
-                                                                                                        liveLight.entityId,
-                                                                                                        minutes
-                                                                                                    )
+                                                                                                    haClient.startSleepTimer(liveLight.entityId, minutes)
                                                                                                 }
                                                                                             }
                                                                                         },
                                                                                     verticalAlignment = Alignment.CenterVertically,
                                                                                     horizontalArrangement = Arrangement.Center
                                                                                 ) {
-                                                                                    val buttonText =
-                                                                                        if (isCurrentTimer && currentRemainingSecs > 0) {
-                                                                                            val mins =
-                                                                                                currentRemainingSecs / 60
-                                                                                            val secs =
-                                                                                                currentRemainingSecs % 60
-                                                                                            "CANCEL (${mins}m ${secs}s)"
-                                                                                        } else {
-                                                                                            "OFF IN $minutes MIN"
-                                                                                        }
+                                                                                    val buttonText = if (isCurrentTimer && currentRemainingSecs > 0) {
+                                                                                        val mins = currentRemainingSecs / 60
+                                                                                        val secs = currentRemainingSecs % 60
+                                                                                        "CANCEL (${mins}m ${secs}s)"
+                                                                                    } else {
+                                                                                        "OFF IN $minutes MIN"
+                                                                                    }
 
                                                                                     Text(
                                                                                         text = buttonText,
