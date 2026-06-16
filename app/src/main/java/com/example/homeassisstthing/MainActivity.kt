@@ -958,13 +958,15 @@ class MainActivity : ComponentActivity() {
                                 verticalArrangement = Arrangement.SpaceBetween,
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Column(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.fillMaxWidth().weight(1f, fill = true)) {
                                     val radarAlpha by rememberInfiniteTransition(label = "").animateFloat(
                                         initialValue = 0.4f, targetValue = 1.0f,
                                         animationSpec = infiniteRepeatable(animation = tween(1500, easing = androidx.compose.animation.core.FastOutSlowInEasing), repeatMode = androidx.compose.animation.core.RepeatMode.Reverse), label = ""
                                     )
 
-                                    //menu button
+
+
+                                    // MENU BUTTON
                                     Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) {
                                         Row(
                                             modifier = Modifier
@@ -987,82 +989,90 @@ class MainActivity : ComponentActivity() {
                                             Text("MENU", color = neonCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                                         }
 
+                                        // MAIN TITLE
                                         Text(
                                             text = menuItems[selectedTab],
                                             color = neonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp,
                                             modifier = Modifier.align(Alignment.Center)
                                         )
 
-                                        // Connection status indicator
-                                        Row(
+                                        // SYSTEM UTILITIES PANEL (Stacked on the right edge)
+                                        Column(
                                             modifier = Modifier.align(Alignment.CenterEnd),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            horizontalAlignment = Alignment.End, // Keeps everything flush right
+                                            verticalArrangement = Arrangement.spacedBy(4.dp) // Perfect gap spacing
                                         ) {
-                                            val statusColor = when {
-                                                connectionStatus == "Connected" -> neonGreen
-                                                connectionStatus.contains("Connecting") -> neonCyan
-                                                else -> Color(0xFFFF5555)
-                                            }
 
-                                            val radarAlpha by androidx.compose.animation.core.rememberInfiniteTransition(
-                                                label = ""
-                                            )
-                                                .animateFloat(
-                                                    initialValue = 0.4f,
-                                                    targetValue = 1.0f,
-                                                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                                                        animation = androidx.compose.animation.core.tween(
-                                                            1500,
-                                                            easing = androidx.compose.animation.core.FastOutSlowInEasing
-                                                        ),
-                                                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
-                                                    ), label = ""
-                                                )
-                                            Box(
-                                                modifier = Modifier.fillMaxWidth()
-                                                    .padding(top = 8.dp, bottom = 4.dp)
+                                            // GLOBAL SCREEN OFF BUTTON
+                                            OutlinedButton(
+                                                onClick = {
+                                                    triggerInterfaceFeedback()
+                                                    isManuallyBlackedOut = true
+                                                    setWindowBrightness(0.01f)
+                                                },
+                                                modifier = Modifier
+                                                    .width(95.dp)
+                                                    .height(22.dp),
+                                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                                shape = RoundedCornerShape(4.dp),
+                                                colors = ButtonDefaults.outlinedButtonColors(containerColor = neonCyan.copy(alpha = 0.04f)),
+                                                border = BorderStroke(0.5.dp, neonCyan.copy(alpha = 0.25f))
                                             ) {
-                                                Column(
-                                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                                    modifier = Modifier.align(Alignment.Center)
-                                                ) {
-                                                    //Text(
-                                                     //   "CORE INTERFACE",
-                                                     //   color = neonCyan,
-                                                     //   fontSize = 11.sp,
-                                                     //   fontWeight = FontWeight.Bold,
-                                                      //  fontFamily = FontFamily.Monospace,
-                                                     //   letterSpacing = 2.sp
-                                                    //)
-                                                }
-
                                                 Row(
-                                                    modifier = Modifier.align(Alignment.CenterEnd).clickable {
-                                                        triggerInterfaceFeedback()
-                                                        if (::haClient.isInitialized) haClient.connect()
-                                                    },
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Box(
-                                                        modifier = Modifier.size(6.dp).background(
-                                                            color = statusColor.copy(alpha = radarAlpha),
-                                                            shape = RoundedCornerShape(50.dp)
-                                                        )
-                                                    )
+                                                    Box(modifier = Modifier.size(4.dp).background(color = neonCyan, shape = RoundedCornerShape(50.dp)))
                                                     Text(
-                                                        text = connectionStatus.uppercase(),
-                                                        color = statusColor.copy(alpha = 0.8f),
-                                                        fontSize = 9.sp,
-                                                        fontFamily = FontFamily.Monospace,
+                                                        "SCREEN OFF",
+                                                        color = neonCyan,
+                                                        fontSize = 8.sp,
                                                         fontWeight = FontWeight.Bold,
-                                                        letterSpacing = 0.5.sp
+                                                        fontFamily = FontFamily.Monospace
                                                     )
                                                 }
                                             }
-                                            //Box(modifier = Modifier.size(6.dp).background(color = neonGreen.copy(alpha = radarAlpha), shape = RoundedCornerShape(50.dp)))
-                                            //Text(connectionStatus, color = neonGreen.copy(alpha = 0.8f), fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+
+                                            // 2. CONNECTION STATUS INDICATOR
+                                            Row(
+                                                modifier = Modifier.clickable {
+                                                    triggerInterfaceFeedback()
+                                                    if (::haClient.isInitialized) haClient.connect()
+                                                },
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                val statusColor = when {
+                                                    connectionStatus == "Connected" -> neonGreen
+                                                    connectionStatus.contains("Connecting") -> neonCyan
+                                                    else -> Color(0xFFFF5555)
+                                                }
+
+                                                val radarAlpha by androidx.compose.animation.core.rememberInfiniteTransition(label = "")
+                                                    .animateFloat(
+                                                        initialValue = 0.4f,
+                                                        targetValue = 1.0f,
+                                                        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                                                            animation = androidx.compose.animation.core.tween(1500, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                                                            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+                                                        ), label = ""
+                                                    )
+
+                                                Box(
+                                                    modifier = Modifier.size(6.dp).background(
+                                                        color = statusColor.copy(alpha = radarAlpha),
+                                                        shape = RoundedCornerShape(50.dp)
+                                                    )
+                                                )
+                                                Text(
+                                                    text = connectionStatus.uppercase(),
+                                                    color = statusColor.copy(alpha = 0.8f),
+                                                    fontSize = 9.sp,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Bold,
+                                                    letterSpacing = 0.5.sp
+                                                )
+                                            }
                                         }
                                     }
 
@@ -1291,49 +1301,7 @@ class MainActivity : ComponentActivity() {
                                                             }
                                                         }
 
-                                                        //Screen Blackout button. Want this moving to the bottom of every tab
-                                                        Spacer(modifier = Modifier.height(16.dp))
 
-                                                        OutlinedButton(
-                                                            onClick = {
-                                                                triggerInterfaceFeedback()
-                                                                isManuallyBlackedOut = true
-                                                                setWindowBrightness(0.01f)
-                                                            },
-                                                            modifier = Modifier.fillMaxWidth()
-                                                                .height(46.dp),
-                                                            shape = RoundedCornerShape(12.dp),
-                                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                                containerColor = neonCyan.copy(alpha = 0.02f)
-                                                            ),
-                                                            border = BorderStroke(
-                                                                1.dp,
-                                                                neonCyan.copy(alpha = 0.25f)
-                                                            )
-                                                        ) {
-                                                            Row(
-                                                                horizontalArrangement = Arrangement.spacedBy(
-                                                                    10.dp
-                                                                ),
-                                                                verticalAlignment = Alignment.CenterVertically
-                                                            ) {
-                                                                Box(
-                                                                    modifier = Modifier.size(8.dp)
-                                                                        .background(
-                                                                            color = neonCyan,
-                                                                            shape = RoundedCornerShape(50.dp)
-                                                                        )
-                                                                )
-                                                                Text(
-                                                                    "SCREEN OFF",
-                                                                    color = neonCyan,
-                                                                    fontSize = 12.sp,
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    fontFamily = FontFamily.Monospace,
-                                                                    letterSpacing = 1.sp
-                                                                )
-                                                            }
-                                                        }
                                                     }
                                                 }
 
@@ -3689,9 +3657,11 @@ class MainActivity : ComponentActivity() {
                                                                 }
                                                             }
                                                         }
+
                                                     }
                                                 }
                                             }
+
 
                                                 //Column(
                                                 //    modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -3709,9 +3679,11 @@ class MainActivity : ComponentActivity() {
 
                                                 }
                                             }
+
                                         }
                                     }
                                 }
+
                             }
                         // ENTITY ALIAS RENAME OVERLAY DIALOG
                         if (entityToRenameInDialog != null) {
@@ -3859,6 +3831,7 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+
             }
         }
     }
