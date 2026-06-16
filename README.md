@@ -9,9 +9,9 @@ Press "apply and re-connect" and you should be connected the Home Assistant. You
 You should be able to go to the Lights page and any lights connected to Home Assistant should appear. 
 You can press on the name of the light for more controls for the lights. you can also rename the device by pressing and holding the name of the light.
 
-=================================================
-              Settings
-=================================================
+
+Settings
+
 
 There are a few options in the settings.
 First off is system appearace. Here you can manually choose a system theme. or turn on automatic themes.
@@ -26,15 +26,15 @@ after an interaction and finally a button to black out the screen. This feature 
 a limitation of android and not being able to unlock the device for an app.
 
 Next you have the connection status and at the very bottom is an option to view all entites Home Assistant is passing to the app with its state
-========================================
-          Dashboard
-========================================
+
+Dashboard
+
 At the current moment theres not much going on with this page. you have your 2 macro buttons and a screen that cycles through some system information. I will be making changes to this page to allow you to customise what is shown
 
 
-============================
-      Lights
-========================
+
+Lights
+
 
 This page lists all the lights found by Home Assistant and gives you option to turn them on and off from this view.
 You can press on the name of the light for more options.
@@ -46,16 +46,16 @@ Colour Temp (this doesnt work at the moment)
 Sleep timer (Will only count down while on the selected light at the moment)
 RGB controls (this will still appear when your light doesnt have RGB capabilties at the moment)
 
-===============
+
 Climate
-==============
+
 
 At the current moment this is a mock up view and doesnt do anything with Home Assistant
 This will be implemented at somepoint soon
 
-================
+
 Security
-===============
+
 Same as climate. just a mock up at the minute
 
 
