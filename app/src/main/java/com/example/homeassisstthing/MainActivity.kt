@@ -434,6 +434,17 @@ class MainActivity : ComponentActivity() {
             var nextDawnMillis by rememberSaveable { mutableStateOf(0L) }
             var nextDuskMillis by rememberSaveable { mutableStateOf(0L) }
             val currentTimeMillis by rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
+            var selectedThemeId by rememberSaveable { mutableStateOf(0) }
+            //auto theme change based on dawn/dusk from homeassist
+            var autoThemeBySun by rememberSaveable {
+                mutableStateOf(sharedPrefs.getBoolean("auto_theme_by_sun", false))
+            }
+            var sunDayThemeId by rememberSaveable {
+                mutableStateOf(sharedPrefs.getInt("sun_day_theme_id", 4)) // Defaults to Solarized Light (Index 4)
+            }
+            var sunNightThemeId by rememberSaveable {
+                mutableStateOf(sharedPrefs.getInt("sun_night_theme_id", 0)) // Defaults to Cyberpunk (Index 0)
+            }
 
             var isInsideFakeSleep by rememberSaveable { mutableStateOf(false) }
             var manualWakeSnoozeUntil by rememberSaveable { mutableStateOf(0L) }
@@ -780,35 +791,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // dark mode
-            val isDaytimeBySun = remember(currentTimeMillis, nextDawnMillis, nextDuskMillis) {
-                if (nextDawnMillis == 0L || nextDuskMillis == 0L) true else nextDawnMillis > nextDuskMillis
-            }
-            val isDarkTheme = when (selectedThemeMode) {
-                0 -> true
-                1 -> false
-                else -> !isDaytimeBySun
-            }
-
-            //val darkBackground = Color(0xFF0D0E15)
-            //val lightBackground = Color(0xFFF4F5F9)
-            //val cardDark = Color(0xFF161924)
-            //val cardLight = Color(0xFFFFFFFF)
-            //val currentBgColor = if (isDarkTheme) darkBackground else lightBackground
-            //val currentCardColor = if (isDarkTheme) cardDark else cardLight
-            //val currentTextColor = if (isDarkTheme) Color.White else Color(0xFF1A1C24)
-
-            //val neonCyan = Color(0xFF00F0FF)
-            //val neonGreen = Color(0xFF00FF66)
-            //val textMuted = Color(0xFF7E8494)
-
-            //  Remember Theme state. Default 6 android theme
-            var selectedThemeId by rememberSaveable { mutableStateOf(6) }
 
             // =================================================================
             // THEME RESOLUTION ENGINE
             // =================================================================
-            val activeThemeColors = when (selectedThemeId) {
+
+            // Evaluate Home Assistant Solar Epoch parameters to deduce light cycle state
+            val isDaytimeBySun = remember(currentTimeMillis, nextDawnMillis, nextDuskMillis) {
+                if (nextDawnMillis == 0L || nextDuskMillis == 0L) true else nextDawnMillis > nextDuskMillis
+            }
+
+            // Evaluate theme ID according to user override properties
+            val resolvedThemeId = if (autoThemeBySun) {
+                if (isDaytimeBySun) sunDayThemeId else sunNightThemeId
+            } else {
+                selectedThemeId
+            }
+
+            val activeThemeColors = when (resolvedThemeId) {
                 0 -> CyberpunkTheme
                 1 -> PipBoyRadTheme
                 2 -> ObsidianStealthTheme
@@ -817,7 +817,13 @@ class MainActivity : ComponentActivity() {
                 5 -> BloodlineTheme
                 6 -> AndroidMaterialTheme
                 7 -> AppleIOSTheme
-                else -> AndroidMaterialTheme // Extra safety default fallback
+                else -> AndroidMaterialTheme
+            }
+
+            val isDarkTheme = when (selectedThemeMode) {
+                0 -> true
+                1 -> false
+                else -> !isDaytimeBySun
             }
 
             val darkBackground = activeThemeColors.bg
@@ -826,8 +832,11 @@ class MainActivity : ComponentActivity() {
             val neonCyan = activeThemeColors.primaryAccent
             val neonGreen = activeThemeColors.secondaryAccent
             val textMuted = activeThemeColors.textMuted
-            val cardLight = Color(0xFFFFFFFF)
-            val lightBackground = Color(0xFFF4F5F9)
+
+
+            val cardLight = activeThemeColors.card
+            val lightBackground = activeThemeColors.bg
+
             val currentCardColor = if (isDarkTheme) cardDark else cardLight
             val currentBgColor = if (isDarkTheme) darkBackground else lightBackground
 
@@ -2176,152 +2185,189 @@ class MainActivity : ComponentActivity() {
                                                         )
                                                     }
 
-                                                    // Theme Configuration Panel
+                                                    // Unified Appearance Configuration Panel
                                                     item {
                                                         Card(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             shape = RoundedCornerShape(12.dp),
-                                                            colors = CardDefaults.cardColors(
-                                                                containerColor = currentCardColor
-                                                            )
+                                                            colors = CardDefaults.cardColors(containerColor = currentCardColor),
+                                                            border = BorderStroke(0.5.dp, textMuted.copy(alpha = 0.2f))
                                                         ) {
-                                                            //Column(modifier = Modifier.padding(12.dp)) {
-                                                            //    Text(
-                                                            //        "INTERFACE THEME",
-                                                            //        color = currentTextColor,
-                                                            //        fontSize = 13.sp,
-                                                            //        fontWeight = FontWeight.Bold
-                                                            //    )
-                                                            //    Spacer(modifier = Modifier.height(8.dp))
-                                                            //    Row(
-                                                            //        modifier = Modifier.fillMaxWidth(),
-                                                            //        horizontalArrangement = Arrangement.spacedBy(
-                                                            //            6.dp
-                                                            //        )
-                                                            //    ) {
-                                                            //        listOf(
-                                                            //            "DARK",
-                                                            //            "LIGHT",
-                                                            //            "AUTO"
-                                                            //        ).forEachIndexed { index, modeLabel ->
-                                                            //            OutlinedButton(
-                                                            //                onClick = {
-                                                            //                    triggerInterfaceFeedback()
-                                                            //                    selectedThemeMode =
-                                                            //                        index; sharedPrefs.edit()
-                                                            //                    .putInt(
-                                                            //                        "theme_mode",
-                                                            //                        index
-                                                            //                    ).apply()
-                                                            //                },
-                                                            //                modifier = Modifier.weight(
-                                                            //                    1f
-                                                            //                ),
-                                                            //                colors = ButtonDefaults.outlinedButtonColors(
-                                                            //                    containerColor = if (selectedThemeMode == index) neonCyan.copy(
-                                                            //                        alpha = 0.1f
-                                                            //                    ) else Color.Transparent
-                                                            //                ),
-                                                            //                border = BorderStroke(
-                                                            //                    1.dp,
-                                                            //                    if (selectedThemeMode == index) neonCyan else textMuted.copy(
-                                                            //                        alpha = 0.3f
-                                                            //                    )
-                                                            //                )
-                                                            //            ) {
-                                                            //                Text(
-                                                            //                    modeLabel,
-                                                            //                    color = if (selectedThemeMode == index) neonCyan else textMuted,
-                                                            //                    fontSize = 9.sp,
-                                                            //                    fontWeight = FontWeight.Bold
-                                                            //                )
-                                                            //            }
-                                                            //        }
-                                                            //    }
-                                                            //}
-                                                        }
-                                                        Card(
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            shape = RoundedCornerShape(12.dp),
-                                                            colors = CardDefaults.cardColors(containerColor = cardDark),
-                                                            border = BorderStroke(1.dp, neonCyan.copy(alpha = 0.15f))
-                                                        ) {
-                                                            Column(modifier = Modifier.padding(16.dp)) {
-                                                                Text(
-                                                                    text = "SYSTEM THEME",
-                                                                    color = neonCyan,
-                                                                    fontSize = 11.sp,
-                                                                    fontFamily = FontFamily.Monospace,
-                                                                    fontWeight = FontWeight.Bold
-                                                                )
-                                                                Text(
-                                                                    text = "Choose theme for how the panel looks",
-                                                                    color = textMuted,
-                                                                    fontSize = 10.sp,
-                                                                    modifier = Modifier.padding(bottom = 16.dp)
-                                                                )
-
-                                                                // 8-Theme Config Interactive Selection Stream List
-                                                                Column(
-                                                                    modifier = Modifier.fillMaxWidth(),
-                                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                                                ) {
-                                                                    val themeItems = listOf(
-                                                                        "CYBERPUNK // SYSTEM CORE" to 0,
-                                                                        "PIP-BOY 3000 // RAD PHOSPHOR" to 1,
-                                                                        "STEALTH MODE // OBSIDIAN ULTRA" to 2,
-                                                                        "VINTAGE OS // AMBER PHOSPHOR" to 3,
-                                                                        "SOLARIZED // DAYLIGHT CANVAS" to 4,
-                                                                        "TACTICAL CORE // NEON CRIMSON" to 5,
-                                                                        "ANDROID M3 // DYNAMIC TEAL" to 6,
-                                                                        "APPLE IOS // LIGHT LUX SYSTEM" to 7
+                                                            Column(
+                                                                modifier = Modifier.padding(16.dp),
+                                                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                                                            ) {
+                                                                // Header
+                                                            Column {
+                                                                    Text(
+                                                                        "SYSTEM APPEARANCE ",
+                                                                        color = neonCyan,
+                                                                        fontSize = 11.sp,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        fontFamily = FontFamily.Monospace,
+                                                                        letterSpacing = 1.sp
                                                                     )
+                                                                    Text(
+                                                                        text = "Manage display profile styles manually or hand control over to the sun.",
+                                                                        color = textMuted,
+                                                                        fontSize = 10.sp
+                                                                    )
+                                                                }
 
-                                                                    themeItems.forEach { (label, index) ->
-                                                                        val isCurrent = selectedThemeId == index
+                                                                // 1. Master Auto Switch Toggle Row
+                                                                Row(
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .background(currentBgColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                                                        .padding(12.dp),
+                                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
+                                                                    Column(modifier = Modifier.weight(1f)) {
+                                                                        Text("Change Theme Based on the sun", color = currentTextColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                                                        Text(
+                                                                            "Auto-switch look based on Home Assistant dawn/dusk metrics.",
+                                                                            color = textMuted,
+                                                                            fontSize = 10.sp
+                                                                        )
+                                                                    }
+                                                                    Switch(
+                                                                        checked = autoThemeBySun,
+                                                                        onCheckedChange = { isChecked ->
+                                                                            triggerInterfaceFeedback()
+                                                                            autoThemeBySun = isChecked
+                                                                            sharedPrefs.edit().putBoolean("auto_theme_by_sun", isChecked).apply()
+                                                                        },
+                                                                        colors = SwitchDefaults.colors(
+                                                                            checkedThumbColor = neonCyan,
+                                                                            checkedTrackColor = neonCyan.copy(alpha = 0.4f)
+                                                                        )
+                                                                    )
+                                                                }
 
-                                                                        Row(
-                                                                            modifier = Modifier
-                                                                                .fillMaxWidth()
-                                                                                .height(48.dp)
-                                                                                .background(
-                                                                                    if (isCurrent) neonCyan.copy(alpha = 0.08f) else Color.Transparent,
-                                                                                    RoundedCornerShape(8.dp)
-                                                                                )
-                                                                                .border(
-                                                                                    1.dp,
-                                                                                    if (isCurrent) neonCyan else textMuted.copy(alpha = 0.15f),
-                                                                                    RoundedCornerShape(8.dp)
-                                                                                )
-                                                                                .clickable {
-                                                                                    triggerInterfaceFeedback()
-                                                                                    selectedThemeId = index
-                                                                                }
-                                                                                .padding(horizontal = 16.dp),
-                                                                            verticalAlignment = Alignment.CenterVertically,
-                                                                            horizontalArrangement = Arrangement.SpaceBetween
-                                                                        ) {
-                                                                            Text(
-                                                                                text = label,
-                                                                                color = if (isCurrent) neonCyan else textMuted,
-                                                                                fontSize = 11.sp,
-                                                                                fontWeight = FontWeight.Bold,
-                                                                                fontFamily = FontFamily.Monospace
-                                                                            )
+                                                                // 2. Conditional Interface Generation Block
+                                                                if (autoThemeBySun) {
+                                                                    HorizontalDivider(color = textMuted.copy(alpha = 0.15f), thickness = 0.5.dp)
 
-                                                                            Box(
-                                                                                modifier = Modifier
-                                                                                    .size(12.dp)
-                                                                                    .border(1.dp, if (isCurrent) neonCyan else textMuted.copy(alpha = 0.4f), RoundedCornerShape(50.dp))
-                                                                                    .padding(2.dp),
-                                                                                contentAlignment = Alignment.Center
-                                                                            ) {
-                                                                                if (isCurrent) {
-                                                                                    Box(
-                                                                                        modifier = Modifier
-                                                                                            .fillMaxSize()
-                                                                                            .background(neonCyan, RoundedCornerShape(50.dp))
+                                                                    val themeNames = listOf("Cyber", "PipBoy", "Stealth", "Amber", "Solarized", "Bloodline", "Material", "Apple")
+
+                                                                    // Day Theme Sub-Grid Selection
+                                                                    Column {
+                                                                        Text("ASSIGN DAYTIME PROFILE", color = neonGreen, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                                                        Spacer(modifier = Modifier.height(6.dp))
+                                                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                                            themeNames.forEachIndexed { idx, name ->
+                                                                                val isSelected = sunDayThemeId == idx
+                                                                                OutlinedButton(
+                                                                                    onClick = {
+                                                                                        triggerInterfaceFeedback()
+                                                                                        sunDayThemeId = idx
+                                                                                        sharedPrefs.edit().putInt("sun_day_theme_id", idx).apply()
+                                                                                    },
+                                                                                    modifier = Modifier.weight(1f).height(34.dp),
+                                                                                    contentPadding = PaddingValues(0.dp),
+                                                                                    border = BorderStroke(1.dp, if (isSelected) neonGreen else textMuted.copy(alpha = 0.15f)),
+                                                                                    colors = ButtonDefaults.outlinedButtonColors(
+                                                                                        containerColor = if (isSelected) neonGreen.copy(alpha = 0.08f) else Color.Transparent
                                                                                     )
+                                                                                ) {
+                                                                                    Text(name.take(4).uppercase(), color = if (isSelected) neonGreen else textMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                                                    // Night Theme Sub-Grid Selection
+                                                                    Column {
+                                                                        Text("ASSIGN NIGHTTIME PROFILE", color = neonCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                                                        Spacer(modifier = Modifier.height(6.dp))
+                                                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                                            themeNames.forEachIndexed { idx, name ->
+                                                                                val isSelected = sunNightThemeId == idx
+                                                                                OutlinedButton(
+                                                                                    onClick = {
+                                                                                        triggerInterfaceFeedback()
+                                                                                        sunNightThemeId = idx
+                                                                                        sharedPrefs.edit().putInt("sun_night_theme_id", idx).apply()
+                                                                                    },
+                                                                                    modifier = Modifier.weight(1f).height(34.dp),
+                                                                                    contentPadding = PaddingValues(0.dp),
+                                                                                    border = BorderStroke(1.dp, if (isSelected) neonCyan else textMuted.copy(alpha = 0.15f)),
+                                                                                    colors = ButtonDefaults.outlinedButtonColors(
+                                                                                        containerColor = if (isSelected) neonCyan.copy(alpha = 0.08f) else Color.Transparent
+                                                                                    )
+                                                                                ) {
+                                                                                    Text(name.take(4).uppercase(), color = if (isSelected) neonCyan else textMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                } else {
+                                                                    // MANUAL MODE: Render full static stream selector sheet
+                                                                    HorizontalDivider(color = textMuted.copy(alpha = 0.15f), thickness = 0.5.dp)
+
+                                                                    Column(
+                                                                        modifier = Modifier.fillMaxWidth(),
+                                                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                                    ) {
+                                                                        val themeItems = listOf(
+                                                                            "CYBERPUNK // SYSTEM CORE" to 0,
+                                                                            "PIP-BOY 3000 // RAD PHOSPHOR" to 1,
+                                                                            "STEALTH MODE // OBSIDIAN ULTRA" to 2,
+                                                                            "VINTAGE OS // AMBER PHOSPHOR" to 3,
+                                                                            "SOLARIZED // DAYLIGHT CANVAS" to 4,
+                                                                            "TACTICAL CORE // NEON CRIMSON" to 5,
+                                                                            "ANDROID M3 // DYNAMIC TEAL" to 6,
+                                                                            "APPLE IOS // LIGHT LUX SYSTEM" to 7
+                                                                        )
+
+                                                                        themeItems.forEach { (label, index) ->
+                                                                            val isCurrent = selectedThemeId == index
+
+                                                                            Row(
+                                                                                modifier = Modifier
+                                                                                    .fillMaxWidth()
+                                                                                    .height(46.dp)
+                                                                                    .background(
+                                                                                        if (isCurrent) neonCyan.copy(alpha = 0.08f) else Color.Transparent,
+                                                                                        RoundedCornerShape(8.dp)
+                                                                                    )
+                                                                                    .border(
+                                                                                        1.dp,
+                                                                                        if (isCurrent) neonCyan else textMuted.copy(alpha = 0.15f),
+                                                                                        RoundedCornerShape(8.dp)
+                                                                                    )
+                                                                                    .clickable {
+                                                                                        triggerInterfaceFeedback()
+                                                                                        selectedThemeId = index
+                                                                                    }
+                                                                                    .padding(horizontal = 16.dp),
+                                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                                            ) {
+                                                                                Text(
+                                                                                    text = label,
+                                                                                    color = if (isCurrent) neonCyan else textMuted,
+                                                                                    fontSize = 11.sp,
+                                                                                    fontWeight = FontWeight.Bold,
+                                                                                    fontFamily = FontFamily.Monospace
+                                                                                )
+
+                                                                                Box(
+                                                                                    modifier = Modifier
+                                                                                        .size(12.dp)
+                                                                                        .border(1.dp, if (isCurrent) neonCyan else textMuted.copy(alpha = 0.4f), RoundedCornerShape(50.dp)),
+                                                                                    contentAlignment = Alignment.Center
+                                                                                ) {
+                                                                                    if (isCurrent) {
+                                                                                        Box(
+                                                                                            modifier = Modifier
+                                                                                                .size(6.dp)
+                                                                                                .background(neonCyan, RoundedCornerShape(50.dp))
+                                                                                        )
+                                                                                    }
                                                                                 }
                                                                             }
                                                                         }
