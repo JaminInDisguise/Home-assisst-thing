@@ -10,5 +10,7 @@ data class SmartDevice(
     val domain: String,
     val brightness: Float = 50f,
     val isExpanded: Boolean = false,
-    val isColorCapable: Boolean = false
+    val isColorCapable: Boolean = false,
+    val currentTemperature: Float = 0f,
+    val targetTemperature: Float = 0f
 ) : Serializable

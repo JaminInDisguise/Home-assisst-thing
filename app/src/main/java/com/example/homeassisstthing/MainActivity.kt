@@ -18,6 +18,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,6 +49,14 @@ import java.util.Calendar
 import kotlin.math.roundToInt
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.input.TextFieldValue
+
+
 
 // =================================================================
 // SYSTEM THEME STRUCTURE DEFINITIONS (Colors & Text Packages)
@@ -425,6 +434,64 @@ class MainActivity : ComponentActivity() {
             var connectionStatus by rememberSaveable { mutableStateOf("Disconnected") }
             var deviceList by rememberSaveable { mutableStateOf(listOf<SmartDevice>()) }
             var showRawRegistry by rememberSaveable { mutableStateOf(false) }
+            var drilledRoomIndex by remember { mutableStateOf<Int?>(null) }
+            // ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// CRASH-PROOF PERSISTENT STORAGE ENGINE
+// ------------------------------------------------------------------
+// Hook into the sharedPreferences backend using your existing line 314 context variable
+            val sharedPreferences = remember { context.getSharedPreferences("climate_panel_storage", android.content.Context.MODE_PRIVATE) }
+
+// 1. DYNAMICALLY LOAD ROOM MAPPINGS FROM DISK ON BOOT
+            val roomMappings = remember {
+                mutableStateMapOf<String, Pair<String, String>>().apply {
+                    val savedKeys = sharedPreferences.getStringSet("climate_room_keys", null)
+
+                    if (savedKeys.isNullOrEmpty()) {
+                        // Pristine fresh install out-of-the-box defaults
+                        put("Airing Cupboard", Pair("sensor.temp_sensors_airing_cupboard_temperature", "sensor.airing_cupboard_humidity"))
+                        put("Living Room", Pair("", ""))
+                        put("Master Bedroom", Pair("", ""))
+                        put("Kitchen Zone", Pair("", ""))
+                        put("Hallway", Pair("", ""))
+                    } else {
+                        // Restore every customized item previously stored on disk
+                        savedKeys.forEach { roomKey ->
+                            val tempEntity = sharedPreferences.getString("cfg_${roomKey}_temp", "") ?: ""
+                            val humEntity = sharedPreferences.getString("cfg_${roomKey}_hum", "") ?: ""
+                            put(roomKey, Pair(tempEntity, humEntity))
+                        }
+                    }
+                }
+            }
+
+// 2. DYNAMICALLY LOAD OVERRIDE TEMPERATURE TARGETS FROM DISK
+            val roomTargetStates = remember {
+                mutableStateMapOf<String, Float>().apply {
+                    roomMappings.keys.forEach { roomKey ->
+                        val savedTarget = sharedPreferences.getFloat("target_${roomKey}", 21.0f)
+                        put(roomKey, savedTarget)
+                    }
+                }
+            }
+
+// 3. BACKGROUND AUTO-SAVE DAEMON
+            LaunchedEffect(roomMappings.toMap(), roomTargetStates.toMap()) {
+                sharedPreferences.edit().apply {
+                    putStringSet("climate_room_keys", roomMappings.keys)
+
+                    roomMappings.forEach { (roomKey, entities) ->
+                        putString("cfg_${roomKey}_temp", entities.first)
+                        putString("cfg_${roomKey}_hum", entities.second)
+                    }
+
+                    roomTargetStates.forEach { (roomKey, targetValue) ->
+                        putFloat("target_${roomKey}", targetValue)
+                    }
+
+                    apply()
+                }
+            }
 
 
             var activeRegistryFilter by rememberSaveable { mutableStateOf("ALL") }
@@ -634,16 +701,23 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
 
-                                        if (domain == "light" || domain == "switch" || domain == "sensor" || domain == "binary_sensor") {
+                                        // --- EXTRACT TEMPERATURE ATTRIBUTES (INITIAL FETCH) ---
+                                        val currentTemp = attributes?.optDouble("current_temperature", 0.0)?.toFloat() ?: 0f
+                                        val targetTemp = attributes?.optDouble("temperature", 0.0)?.toFloat() ?: 0f
+
+                                        // Added || domain == "climate" to the allowed filters here
+                                        if (domain == "light" || domain == "switch" || domain == "sensor" || domain == "binary_sensor" || domain == "climate") {
                                             discoveredDevices.add(
                                                 SmartDevice(
-                                                    entityId,
-                                                    friendlyName,
-                                                    stateValue.uppercase(),
-                                                    domain,
-                                                    initialBrightness,
-                                                    false,
-                                                    hasColorSupport // <-- Pass the evaluation result here
+                                                    entityId = entityId,
+                                                    friendlyName = friendlyName,
+                                                    state = stateValue.uppercase(),
+                                                    domain = domain,
+                                                    brightness = initialBrightness,
+                                                    isExpanded = false,
+                                                    isColorCapable = hasColorSupport,
+                                                    currentTemperature = currentTemp, // <-- Pass current temp
+                                                    targetTemperature = targetTemp    // <-- Pass target temp
                                                 )
                                             )
                                         }
@@ -681,12 +755,18 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
 
+                                        // --- EXTRACT TEMPERATURE ATTRIBUTES (LIVE UPDATES) ---
+                                        val currentTemp = attributes?.optDouble("current_temperature", 0.0)?.toFloat() ?: 0f
+                                        val targetTemp = attributes?.optDouble("temperature", 0.0)?.toFloat() ?: 0f
+
                                         deviceList = deviceList.map { device ->
                                             if (device.entityId == entityId) {
                                                 device.copy(
                                                     state = stateValue,
                                                     brightness = updatedBrightness,
-                                                    isColorCapable = hasColorSupport // <-- Keep data class state tracking uniform
+                                                    isColorCapable = hasColorSupport,
+                                                    currentTemperature = currentTemp, // <-- Sync live current temp
+                                                    targetTemperature = targetTemp    // <-- Sync live target temp
                                                 )
                                             } else device
                                         }
@@ -2200,6 +2280,12 @@ class MainActivity : ComponentActivity() {
                                             // ---------------------------------------------------------
                                             2 -> {
                                                 ClimateControlTab(
+                                                    deviceList = deviceList,
+                                                    haClient = haClient,
+                                                    drilledRoomIndex = drilledRoomIndex,
+                                                    onDrillRoom = { drilledRoomIndex = it },
+                                                    roomTargetStates = roomTargetStates,
+                                                    roomMappings = roomMappings,
                                                     currentBgColor = darkBackground, currentTextColor = currentTextColor,
                                                     neonCyan = neonCyan, neonGreen = neonGreen, textMuted = textMuted,
                                                     triggerInterfaceFeedback = triggerInterfaceFeedback
@@ -3925,6 +4011,12 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun ClimateControlTab(
+    deviceList: List<SmartDevice>,
+    haClient: HomeAssistantClient?,
+    drilledRoomIndex: Int?,
+    onDrillRoom: (Int?) -> Unit,
+    roomTargetStates: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Float>,
+    roomMappings: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Pair<String, String>>,
     currentBgColor: Color,
     currentTextColor: Color,
     neonCyan: Color,
@@ -3932,39 +4024,446 @@ fun ClimateControlTab(
     textMuted: Color,
     triggerInterfaceFeedback: () -> Unit
 ) {
-    var mockTemp by remember { mutableStateOf(21.5f) }
-    var mockHvacMode by remember { mutableStateOf("ECO VENTS") }
+    val masterSwitchEntity = "input_boolean.heating_master_switch"
 
-    Column(
-        modifier = Modifier.fillMaxSize().background(currentBgColor.copy(alpha = 0.3f), RoundedCornerShape(12.dp)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Text("ENVIRONMENTAL CLIMATE REGISTRY (MOCK)", color = neonCyan, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text("TARGET TEMPERATURE", color = textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                Text(text = "${String.format("%.1f", mockTemp)}°C", color = currentTextColor, fontSize = 38.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
-                Text(text = "HVAC ATMOSPHERE: ${if (mockHvacMode == "OFFLINE") "STANDBY" else "RECIRCULATION"}", color = if (mockHvacMode == "OFFLINE") textMuted else neonGreen, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(modifier = Modifier.size(50.dp).background(neonCyan.copy(alpha = 0.08f), RoundedCornerShape(8.dp)).border(1.dp, neonCyan.copy(alpha = 0.3f), RoundedCornerShape(8.dp)).clickable { triggerInterfaceFeedback(); mockTemp -= 0.5f }, contentAlignment = Alignment.Center) {
-                    Text("▼", color = neonCyan, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    // Maintain a sorted stable list of active names
+    val roomNames = remember(roomMappings.keys.size, roomMappings.keys) { roomMappings.keys.toList().sorted() }
+
+    val masterSwitchDevice = deviceList.find { it.entityId == masterSwitchEntity }
+    val isMasterHeatingOn = masterSwitchDevice?.state == "ON"
+
+    val availableSensors = remember(deviceList) {
+        deviceList.filter { it.domain == "sensor" }.map { it.entityId }.sorted()
+    }
+
+    var sensoryPickerTargetMode by remember { mutableStateOf<String?>(null) }
+    val selectedRoomName = if (drilledRoomIndex != null && drilledRoomIndex < roomNames.size) roomNames[drilledRoomIndex] else ""
+
+    // Name Editing States
+    var isEditingName by remember { mutableStateOf(false) }
+    var nameDraftText by remember { mutableStateOf("") }
+
+    // Sync draft text ONLY when opening editing mode to isolate typing lag/bugs
+    LaunchedEffect(isEditingName) {
+        if (isEditingName) nameDraftText = selectedRoomName
+    }
+
+    // Reset layout modes safely on room navigation
+    LaunchedEffect(drilledRoomIndex) {
+        isEditingName = false
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+
+            // MODULE 1: POWER CONSOLE (HIDDEN IN DRILL DOWN)
+            if (drilledRoomIndex == null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(currentBgColor.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                        .border(1.dp, if (isMasterHeatingOn) neonGreen.copy(alpha = 0.4f) else textMuted.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("GLOBAL SYSTEM CONSOLE", color = neonCyan, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (isMasterHeatingOn) "HEATING: ACTIVE CORE" else "HEATING: STANDBY MODE",
+                            color = if (isMasterHeatingOn) neonGreen else textMuted,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(width = 110.dp, height = 38.dp)
+                            .background(if (isMasterHeatingOn) neonGreen.copy(alpha = 0.15f) else textMuted.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                            .border(1.dp, if (isMasterHeatingOn) neonGreen else textMuted.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .clickable {
+                                triggerInterfaceFeedback()
+                                val targetService = if (isMasterHeatingOn) "turn_off" else "turn_on"
+                                val genericSwitchJson = """{"id":${System.currentTimeMillis().toInt()},"type":"call_service","domain":"homeassistant","service":"$targetService","service_data":{"entity_id":"$masterSwitchEntity"}}""".replace(" ", "")
+                                haClient?.sendCustomJson(genericSwitchJson)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (isMasterHeatingOn) "POWER OFF" else "POWER ON",
+                            color = if (isMasterHeatingOn) neonGreen else currentTextColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
-                Box(modifier = Modifier.size(50.dp).background(neonCyan.copy(alpha = 0.08f), RoundedCornerShape(8.dp)).border(1.dp, neonCyan.copy(alpha = 0.3f), RoundedCornerShape(8.dp)).clickable { triggerInterfaceFeedback(); mockTemp += 0.5f }, contentAlignment = Alignment.Center) {
-                    Text("▲", color = neonCyan, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+
+            // ----------------------------------------------------
+            // CONDITIONAL DRILL-DOWN LAYOUT
+            // ----------------------------------------------------
+            if (drilledRoomIndex == null) {
+                // VIEW A: MAIN ROOM DIRECTORY LISTING
+                Text("ZONE ENVIRONMENT MATRIX", color = textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+
+                roomNames.forEachIndexed { index, roomName ->
+                    val (tempId, _) = roomMappings[roomName] ?: Pair("", "")
+                    val sensorDevice = deviceList.find { it.entityId == tempId }
+                    val rTemp = sensorDevice?.state?.toFloatOrNull() ?: 0.0f
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(currentBgColor.copy(alpha = 0.2f), RoundedCornerShape(10.dp))
+                            .border(1.dp, textMuted.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                            .clickable { onDrillRoom(index) }
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(roomName.uppercase(), color = currentTextColor, fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(
+                                text = if (rTemp > 0f) "${String.format("%.1f", rTemp)}°C" else "UNASSIGNED",
+                                color = if (rTemp > 0f) neonCyan else textMuted,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text("▶", color = neonCyan, fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // DYNAMIC ADD NEW ZONE CONTROL MODULE
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .background(neonCyan.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                        .border(1.dp, neonCyan.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        .clickable {
+                            triggerInterfaceFeedback()
+                            // Generates a clean generic key sequence that doesn't conflict
+                            val newZoneName = "NEW ZONE ${roomNames.size + 1}"
+                            if (!roomMappings.containsKey(newZoneName)) {
+                                roomMappings[newZoneName] = Pair("", "")
+                                roomTargetStates[newZoneName] = 21.0f
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("+ ADD CLIMATE ZONE TO MATRIX", color = neonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                }
+
+            } else {
+                // VIEW B: ISOLATED ROOM TELEMETRY (RESTRUCTURED)
+                val roomName = selectedRoomName
+                val (tempEntityId, humidityEntityId) = roomMappings[roomName] ?: Pair("", "")
+
+                val rTemp = deviceList.find { it.entityId == tempEntityId }?.state?.toFloatOrNull() ?: 0.0f
+                val rHum = deviceList.find { it.entityId == humidityEntityId }?.state ?: "--"
+                val activeRoomTarget = roomTargetStates[roomName] ?: 21.0f
+
+                // Back Nav Banner
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "◀ BACK TO MATRIX",
+                        color = neonCyan,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable { onDrillRoom(null) }
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text("ZONE CONFIGURATION SYSTEM", color = textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                }
+
+                // HEADER SECTION: ZONE IDENTIFIER & ADJUSTABLE SETPOINT UNDERNEATH
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(currentBgColor.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Zone Name Handler
+                    Column {
+                        if (isEditingName) {
+                            Text("EDITING MODE - PRESS CHECK TO COMMIT RE-ROUTE", color = neonGreen, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                androidx.compose.foundation.text.BasicTextField(
+                                    value = nameDraftText,
+                                    // BUG FIXED: We type exclusively into an isolated string draft state!
+                                    onValueChange = { nameDraftText = it },
+                                    textStyle = TextStyle(color = currentTextColor, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
+                                    cursorBrush = androidx.compose.ui.graphics.SolidColor(neonCyan),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(currentBgColor.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                                        .border(1.dp, neonCyan, RoundedCornerShape(4.dp))
+                                        .padding(8.dp)
+                                )
+                                Text(
+                                    text = "✔",
+                                    color = neonGreen,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clickable {
+                                        triggerInterfaceFeedback()
+                                        val cleanDraft = nameDraftText.trim()
+                                        // Migration logic fires EXACTLY once here when finalized
+                                        if (cleanDraft.isNotBlank() && cleanDraft != roomName) {
+                                            val currentMappingData = roomMappings[roomName] ?: Pair("", "")
+                                            val currentTargetData = roomTargetStates[roomName] ?: 21.0f
+
+                                            roomMappings.remove(roomName)
+                                            roomTargetStates.remove(roomName)
+
+                                            roomMappings[cleanDraft] = currentMappingData
+                                            roomTargetStates[cleanDraft] = currentTargetData
+
+                                            // Auto-route navigation focus index straight to our newly named item slot
+                                            val updatedList = roomMappings.keys.toList().sorted()
+                                            val newIdx = updatedList.indexOf(cleanDraft)
+                                            if (newIdx != -1) onDrillRoom(newIdx)
+                                        }
+                                        isEditingName = false
+                                    }
+                                )
+                            }
+                        } else {
+                            Text("ZONE IDENTIFIER (HOLD TO RENAME)", color = textMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = { },
+                                        onLongClick = {
+                                            triggerInterfaceFeedback()
+                                            isEditingName = true
+                                        }
+                                    )
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Text(roomName.uppercase(), color = currentTextColor, fontSize = 22.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+
+                    androidx.compose.material3.HorizontalDivider(color = textMuted.copy(alpha = 0.15f), thickness = 1.dp)
+
+                    // SETPOINT
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("TARGET CLIMATE SETPOINT", color = neonCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("${String.format("%.1f", activeRoomTarget)}°C", color = currentTextColor, fontSize = 34.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Box(
+                                    modifier = Modifier.size(42.dp).background(neonCyan.copy(alpha = 0.08f), RoundedCornerShape(6.dp)).border(1.dp, neonCyan.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                        .clickable { triggerInterfaceFeedback(); roomTargetStates[roomName] = activeRoomTarget - 0.5f },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("▼", color = neonCyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Box(
+                                    modifier = Modifier.size(42.dp).background(neonCyan.copy(alpha = 0.08f), RoundedCornerShape(6.dp)).border(1.dp, neonCyan.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                        .clickable { triggerInterfaceFeedback(); roomTargetStates[roomName] = activeRoomTarget + 0.5f },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("▲", color = neonCyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Current Telemetry Box
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(currentBgColor.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text("AMBIENT TEMPERATURE", color = textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                        Text(if (tempEntityId.isNotEmpty()) "${String.format("%.1f", rTemp)}°C" else "N/A", color = currentTextColor, fontSize = 28.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("RELATIVE HUMIDITY", color = textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                        val formattedHumidity = remember(rHum) {
+                            val numericHum = rHum.toFloatOrNull()
+                            if (numericHum != null) "${numericHum.toInt()}%" else "N/A"
+                        }
+                        Text(
+                            text = if (humidityEntityId.isNotEmpty() && rHum != "--") formattedHumidity else "N/A",
+                            color = currentTextColor,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Black,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                // HARDWARE ASSIGNMENT ENGINE CONSOLE
+                var showHardwareEngine by remember { mutableStateOf(false) }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(currentBgColor.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
+                        .border(1.dp, neonCyan.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+                        .clickable { triggerInterfaceFeedback(); showHardwareEngine = !showHardwareEngine }
+                        .padding(10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("HARDWARE ASSIGNMENT ENGINE", color = if (showHardwareEngine) neonCyan else textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                    Text(if (showHardwareEngine) "CLOSE ▲" else "EXPAND TOOLKIT ▼", color = neonCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                }
+
+                if (showHardwareEngine) {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+                        // Temperature Selector
+                        Column {
+                            Text("TEMPERATURE ENTITY LINK", color = neonCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(40.dp)
+                                    .background(currentBgColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                    .border(1.dp, textMuted.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                    .clickable { triggerInterfaceFeedback(); sensoryPickerTargetMode = "TEMP" }
+                                    .padding(horizontal = 10.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Text(text = tempEntityId.ifEmpty { "SELECT TEMPERATURE SENSOR..." }, color = if (tempEntityId.isEmpty()) textMuted else currentTextColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+
+                        // Humidity Selector
+                        Column {
+                            Text("HUMIDITY ENTITY LINK", color = neonCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(40.dp)
+                                    .background(currentBgColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                    .border(1.dp, textMuted.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                    .clickable { triggerInterfaceFeedback(); sensoryPickerTargetMode = "HUMIDITY" }
+                                    .padding(horizontal = 10.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Text(text = humidityEntityId.ifEmpty { "SELECT HUMIDITY SENSOR..." }, color = if (humidityEntityId.isEmpty()) textMuted else currentTextColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // DESTRUCTIVE ENGINE COMMAND MODULE (DELETE ZONE)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .background(Color.Red.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                        .border(1.dp, Color.Red.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                        .clickable {
+                            triggerInterfaceFeedback()
+                            roomMappings.remove(roomName)
+                            roomTargetStates.remove(roomName)
+                            onDrillRoom(null) // Pop stack back to general list matrix
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("PURGE ZONE FROM PROTOCOL ENGINE", color = Color.Red, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                 }
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val climatePresets = listOf("ECO VENTS", "BOOST PURGE", "OFFLINE")
-            climatePresets.forEach { preset ->
-                val isSelected = mockHvacMode == preset
-                Box(
-                    modifier = Modifier.weight(1f).height(44.dp).background(if (isSelected) neonCyan.copy(alpha = 0.15f) else textMuted.copy(alpha = 0.04f), RoundedCornerShape(6.dp)).border(1.dp, if (isSelected) neonCyan else Color.Transparent, RoundedCornerShape(6.dp)).clickable { triggerInterfaceFeedback(); mockHvacMode = preset },
-                    contentAlignment = Alignment.Center
+
+        // FULL SCREEN OVERLAY PICKER
+        if (sensoryPickerTargetMode != null) {
+            val currentPair = roomMappings[selectedRoomName] ?: Pair("", "")
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.85f))
+                    .clickable { sensoryPickerTargetMode = null }
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.85f)
+                        .background(currentBgColor, RoundedCornerShape(12.dp))
+                        .border(2.2.dp, neonCyan, RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(text = preset, color = if (isSelected) neonCyan else textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    Text(text = "CHOOSE ${sensoryPickerTargetMode} ATTACHMENT", color = neonCyan, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                    androidx.compose.material3.HorizontalDivider(color = textMuted.copy(alpha = 0.3f))
+
+                    LazyColumn(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(availableSensors) { sensorId ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(textMuted.copy(alpha = 0.06f), RoundedCornerShape(6.dp))
+                                    .border(1.dp, textMuted.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        triggerInterfaceFeedback()
+                                        if (sensoryPickerTargetMode == "TEMP") {
+                                            roomMappings[selectedRoomName] = Pair(sensorId, currentPair.second)
+                                        } else {
+                                            roomMappings[selectedRoomName] = Pair(currentPair.first, sensorId)
+                                        }
+                                        sensoryPickerTargetMode = null
+                                    }
+                                    .padding(12.dp)
+                            ) {
+                                Text(sensorId, color = currentTextColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .background(textMuted.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                            .clickable { sensoryPickerTargetMode = null },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("ABORT ASSIGNMENT", color = textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
                 }
             }
         }

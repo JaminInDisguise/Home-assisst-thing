@@ -187,6 +187,42 @@ class HomeAssistantClient(
         }
     }
 
+    fun setClimateTemperature(entityId: String, targetTemp: Float) {
+        val payload = """
+        {
+            "id": ${messageIdCounter.getAndIncrement()},
+            "type": "call_service",
+            "domain": "climate",
+            "service": "set_temperature",
+            "service_data": {
+                "entity_id": "$entityId",
+                "temperature": $targetTemp
+            }
+        }
+    """.trimIndent().replace("\n", "").replace(" ", "")
+
+        Log.d("HA_CLIENT", "Sending Target Temp -> $payload")
+        webSocket?.send(payload)
+    }
+
+    fun setClimateHvacMode(entityId: String, hvacMode: String) {
+        val payload = """
+        {
+            "id": ${messageIdCounter.getAndIncrement()},
+            "type": "call_service",
+            "domain": "climate",
+            "service": "set_hvac_mode",
+            "service_data": {
+                "entity_id": "$entityId",
+                "hvac_mode": "${hvacMode.lowercase()}"
+            }
+        }
+    """.trimIndent().replace("\n", "").replace(" ", "")
+
+        Log.d("HA_CLIENT", "Sending HVAC Mode -> $payload")
+        webSocket?.send(payload)
+    }
+
     fun disconnect() {
         isDisconnectingIntentionally = true
         webSocket?.close(1000, "User disconnected intentionally")
