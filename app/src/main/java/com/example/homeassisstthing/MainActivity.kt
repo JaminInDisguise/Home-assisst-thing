@@ -621,6 +621,19 @@ class MainActivity : ComponentActivity() {
                                             if (currentBright != -1) ((currentBright / 255f) * 100f) else 50f
                                         val domain = entityId.split(".").firstOrNull() ?: ""
 
+                                        // --- CHECK FOR RGB CAPABILITY DURING INITIAL FETCH ---
+                                        val colorModes = attributes?.optJSONArray("supported_color_modes")
+                                        var hasColorSupport = false
+                                        if (colorModes != null) {
+                                            for (j in 0 until colorModes.length()) {
+                                                val mode = colorModes.optString(j).lowercase()
+                                                if (mode.contains("rgb") || mode.contains("hs") || mode.contains("xy")) {
+                                                    hasColorSupport = true
+                                                    break
+                                                }
+                                            }
+                                        }
+
                                         if (domain == "light" || domain == "switch" || domain == "sensor" || domain == "binary_sensor") {
                                             discoveredDevices.add(
                                                 SmartDevice(
@@ -629,7 +642,8 @@ class MainActivity : ComponentActivity() {
                                                     stateValue.uppercase(),
                                                     domain,
                                                     initialBrightness,
-                                                    false
+                                                    false,
+                                                    hasColorSupport // <-- Pass the evaluation result here
                                                 )
                                             )
                                         }
@@ -648,18 +662,31 @@ class MainActivity : ComponentActivity() {
                                         val stateValue = newStateObj.optString("state").uppercase()
                                         val attributes = newStateObj.optJSONObject("attributes")
 
-
                                         val currentBright =
                                             attributes?.optDouble("brightness", -1.0) ?: -1.0
                                         val updatedBrightness = if (currentBright != -1.0) {
                                             ((currentBright / 255.0) * 100.0).toFloat()
                                         } else 50f
 
+                                        // --- CHECK FOR RGB CAPABILITY DURING LIVE UPDATES ---
+                                        val colorModes = attributes?.optJSONArray("supported_color_modes")
+                                        var hasColorSupport = false
+                                        if (colorModes != null) {
+                                            for (j in 0 until colorModes.length()) {
+                                                val mode = colorModes.optString(j).lowercase()
+                                                if (mode.contains("rgb") || mode.contains("hs") || mode.contains("xy")) {
+                                                    hasColorSupport = true
+                                                    break
+                                                }
+                                            }
+                                        }
+
                                         deviceList = deviceList.map { device ->
                                             if (device.entityId == entityId) {
                                                 device.copy(
                                                     state = stateValue,
-                                                    brightness = updatedBrightness
+                                                    brightness = updatedBrightness,
+                                                    isColorCapable = hasColorSupport // <-- Keep data class state tracking uniform
                                                 )
                                             } else device
                                         }
@@ -1463,10 +1490,16 @@ class MainActivity : ComponentActivity() {
                                                     }
 
                                                     // track which timer duration button is active (15, 30, 45)
-                                                    val currentTimerMins = activeTimersMinutesMap[liveLight.entityId] ?: 0
+                                                    val currentTimerMins =
+                                                        activeTimersMinutesMap[liveLight.entityId]
+                                                            ?: 0
 
                                                     // Track a ticking state locally just to force the UI text to update every second while looking at it
-                                                    var localTickTrigger by remember { mutableStateOf(0) }
+                                                    var localTickTrigger by remember {
+                                                        mutableStateOf(
+                                                            0
+                                                        )
+                                                    }
                                                     LaunchedEffect(currentTimerMins) {
                                                         if (currentTimerMins > 0) {
                                                             while (true) {
@@ -1477,17 +1510,27 @@ class MainActivity : ComponentActivity() {
                                                     }
 
                                                     // Calculate remaining seconds dynamically by comparing the target timestamp to current system time
-                                                    val currentRemainingSecs = remember(liveLight.entityId, localTickTrigger) {
-                                                        val targetEpoch = timerTargetEpochMap[liveLight.entityId] ?: 0L
-                                                        val currentEpoch = System.currentTimeMillis() / 1000
-                                                        (targetEpoch - currentEpoch).coerceAtLeast(0L)
+                                                    val currentRemainingSecs = remember(
+                                                        liveLight.entityId,
+                                                        localTickTrigger
+                                                    ) {
+                                                        val targetEpoch =
+                                                            timerTargetEpochMap[liveLight.entityId]
+                                                                ?: 0L
+                                                        val currentEpoch =
+                                                            System.currentTimeMillis() / 1000
+                                                        (targetEpoch - currentEpoch).coerceAtLeast(
+                                                            0L
+                                                        )
                                                     }
 
                                                     // Auto-clean maps if time runs out naturally while looking at it
                                                     LaunchedEffect(currentRemainingSecs) {
                                                         if (currentTimerMins > 0 && currentRemainingSecs == 0L) {
-                                                            activeTimersMinutesMap[liveLight.entityId] = 0
-                                                            timerTargetEpochMap[liveLight.entityId] = 0L
+                                                            activeTimersMinutesMap[liveLight.entityId] =
+                                                                0
+                                                            timerTargetEpochMap[liveLight.entityId] =
+                                                                0L
                                                         }
                                                     }
 
@@ -1516,7 +1559,11 @@ class MainActivity : ComponentActivity() {
                                                         )
                                                     }
 
-                                                    LaunchedEffect(redValue, greenValue, blueValue) {
+                                                    LaunchedEffect(
+                                                        redValue,
+                                                        greenValue,
+                                                        blueValue
+                                                    ) {
                                                         if (isLightOn) {
                                                             delay(250)
                                                             val currentR =
@@ -1609,7 +1656,11 @@ class MainActivity : ComponentActivity() {
                                                                         fontFamily = FontFamily.Monospace,
                                                                         letterSpacing = 1.sp
                                                                     )
-                                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                                    Spacer(
+                                                                        modifier = Modifier.height(
+                                                                            2.dp
+                                                                        )
+                                                                    )
                                                                     Text(
                                                                         text = resolvedDisplayName,
                                                                         color = currentTextColor,
@@ -1632,14 +1683,18 @@ class MainActivity : ComponentActivity() {
                                                                         .background(
                                                                             if (isLightOn) neonGreen.copy(
                                                                                 alpha = 0.06f
-                                                                            ) else textMuted.copy(alpha = 0.02f),
+                                                                            ) else textMuted.copy(
+                                                                                alpha = 0.02f
+                                                                            ),
                                                                             RoundedCornerShape(10.dp)
                                                                         )
                                                                         .border(
                                                                             1.dp,
                                                                             if (isLightOn) neonGreen.copy(
                                                                                 alpha = 0.3f
-                                                                            ) else textMuted.copy(alpha = 0.1f),
+                                                                            ) else textMuted.copy(
+                                                                                alpha = 0.1f
+                                                                            ),
                                                                             RoundedCornerShape(10.dp)
                                                                         ),
                                                                     contentAlignment = Alignment.Center
@@ -1669,7 +1724,8 @@ class MainActivity : ComponentActivity() {
                                                                                     ) else it
                                                                                 }
                                                                             if (!isLightOn && localSliderValue < 5f) {
-                                                                                localSliderValue = 100f
+                                                                                localSliderValue =
+                                                                                    100f
                                                                             }
                                                                         }
                                                                     },
@@ -1705,7 +1761,8 @@ class MainActivity : ComponentActivity() {
                                                                         .background(
                                                                             currentBgColor.copy(
                                                                                 alpha = 0.3f
-                                                                            ), RoundedCornerShape(12.dp)
+                                                                            ),
+                                                                            RoundedCornerShape(12.dp)
                                                                         )
                                                                         .padding(14.dp)
                                                                 ) {
@@ -1728,7 +1785,11 @@ class MainActivity : ComponentActivity() {
                                                                             fontWeight = FontWeight.Bold
                                                                         )
                                                                     }
-                                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                                    Spacer(
+                                                                        modifier = Modifier.height(
+                                                                            4.dp
+                                                                        )
+                                                                    )
                                                                     Slider(
                                                                         value = localSliderValue,
                                                                         onValueChange = {
@@ -1763,7 +1824,9 @@ class MainActivity : ComponentActivity() {
                                                                                 currentBgColor.copy(
                                                                                     alpha = 0.3f
                                                                                 ),
-                                                                                RoundedCornerShape(12.dp)
+                                                                                RoundedCornerShape(
+                                                                                    12.dp
+                                                                                )
                                                                             )
                                                                             .padding(14.dp)
                                                                     ) {
@@ -1848,10 +1911,11 @@ class MainActivity : ComponentActivity() {
                                                                                     Box(
                                                                                         modifier = Modifier.size(
                                                                                             8.dp
-                                                                                        ).background(
-                                                                                            indicatorColor,
-                                                                                            androidx.compose.foundation.shape.CircleShape
                                                                                         )
+                                                                                            .background(
+                                                                                                indicatorColor,
+                                                                                                androidx.compose.foundation.shape.CircleShape
+                                                                                            )
                                                                                     )
                                                                                     Spacer(
                                                                                         modifier = Modifier.width(
@@ -1875,8 +1939,12 @@ class MainActivity : ComponentActivity() {
                                                                         modifier = Modifier
                                                                             .weight(1f)
                                                                             .background(
-                                                                                currentBgColor.copy(alpha = 0.3f),
-                                                                                RoundedCornerShape(12.dp)
+                                                                                currentBgColor.copy(
+                                                                                    alpha = 0.3f
+                                                                                ),
+                                                                                RoundedCornerShape(
+                                                                                    12.dp
+                                                                                )
                                                                             )
                                                                             .padding(14.dp)
                                                                     ) {
@@ -1888,55 +1956,88 @@ class MainActivity : ComponentActivity() {
                                                                             fontWeight = FontWeight.Bold
                                                                         )
 
-                                                                        Spacer(modifier = Modifier.height(10.dp))
+                                                                        Spacer(
+                                                                            modifier = Modifier.height(
+                                                                                10.dp
+                                                                            )
+                                                                        )
 
-                                                                        val timeOptions = listOf(15, 30, 45)
-                                                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                                        val timeOptions =
+                                                                            listOf(15, 30, 45)
+                                                                        Column(
+                                                                            verticalArrangement = Arrangement.spacedBy(
+                                                                                8.dp
+                                                                            )
+                                                                        ) {
                                                                             timeOptions.forEach { minutes ->
-                                                                                val isCurrentTimer = currentTimerMins == minutes
+                                                                                val isCurrentTimer =
+                                                                                    currentTimerMins == minutes
                                                                                 Row(
                                                                                     modifier = Modifier
                                                                                         .fillMaxWidth()
                                                                                         .height(36.dp)
                                                                                         .background(
-                                                                                            if (!isLightOn) textMuted.copy(alpha = 0.05f)
-                                                                                            else if (isCurrentTimer) neonGreen.copy(alpha = 0.15f)
-                                                                                            else neonCyan.copy(alpha = 0.05f),
-                                                                                            RoundedCornerShape(6.dp)
+                                                                                            if (!isLightOn) textMuted.copy(
+                                                                                                alpha = 0.05f
+                                                                                            )
+                                                                                            else if (isCurrentTimer) neonGreen.copy(
+                                                                                                alpha = 0.15f
+                                                                                            )
+                                                                                            else neonCyan.copy(
+                                                                                                alpha = 0.05f
+                                                                                            ),
+                                                                                            RoundedCornerShape(
+                                                                                                6.dp
+                                                                                            )
                                                                                         )
                                                                                         .border(
                                                                                             1.dp,
                                                                                             if (isCurrentTimer) neonGreen else Color.Transparent,
-                                                                                            RoundedCornerShape(6.dp)
+                                                                                            RoundedCornerShape(
+                                                                                                6.dp
+                                                                                            )
                                                                                         )
-                                                                                        .clickable(enabled = isLightOn) {
+                                                                                        .clickable(
+                                                                                            enabled = isLightOn
+                                                                                        ) {
                                                                                             triggerInterfaceFeedback()
                                                                                             if (isCurrentTimer) {
                                                                                                 // CANCEL ACTION
-                                                                                                activeTimersMinutesMap[liveLight.entityId] = 0
-                                                                                                timerTargetEpochMap[liveLight.entityId] = 0L
+                                                                                                activeTimersMinutesMap[liveLight.entityId] =
+                                                                                                    0
+                                                                                                timerTargetEpochMap[liveLight.entityId] =
+                                                                                                    0L
                                                                                             } else {
                                                                                                 // START TIMER ACTION
-                                                                                                val futureTargetEpoch = (System.currentTimeMillis() / 1000) + (minutes * 60)
+                                                                                                val futureTargetEpoch =
+                                                                                                    (System.currentTimeMillis() / 1000) + (minutes * 60)
 
-                                                                                                activeTimersMinutesMap[liveLight.entityId] = minutes
-                                                                                                timerTargetEpochMap[liveLight.entityId] = futureTargetEpoch
+                                                                                                activeTimersMinutesMap[liveLight.entityId] =
+                                                                                                    minutes
+                                                                                                timerTargetEpochMap[liveLight.entityId] =
+                                                                                                    futureTargetEpoch
 
                                                                                                 if (::haClient.isInitialized) {
-                                                                                                    haClient.startSleepTimer(liveLight.entityId, minutes)
+                                                                                                    haClient.startSleepTimer(
+                                                                                                        liveLight.entityId,
+                                                                                                        minutes
+                                                                                                    )
                                                                                                 }
                                                                                             }
                                                                                         },
                                                                                     verticalAlignment = Alignment.CenterVertically,
                                                                                     horizontalArrangement = Arrangement.Center
                                                                                 ) {
-                                                                                    val buttonText = if (isCurrentTimer && currentRemainingSecs > 0) {
-                                                                                        val mins = currentRemainingSecs / 60
-                                                                                        val secs = currentRemainingSecs % 60
-                                                                                        "CANCEL (${mins}m ${secs}s)"
-                                                                                    } else {
-                                                                                        "OFF IN $minutes MIN"
-                                                                                    }
+                                                                                    val buttonText =
+                                                                                        if (isCurrentTimer && currentRemainingSecs > 0) {
+                                                                                            val mins =
+                                                                                                currentRemainingSecs / 60
+                                                                                            val secs =
+                                                                                                currentRemainingSecs % 60
+                                                                                            "CANCEL (${mins}m ${secs}s)"
+                                                                                        } else {
+                                                                                            "OFF IN $minutes MIN"
+                                                                                        }
 
                                                                                     Text(
                                                                                         text = buttonText,
@@ -1954,127 +2055,138 @@ class MainActivity : ComponentActivity() {
                                                                 }
 
                                                                 // MODULE 3: RGBW CHROMATIC COLOR CONTROL PANEL
-                                                                Column(
-                                                                    modifier = Modifier
-                                                                        .fillMaxWidth()
-                                                                        .background(
-                                                                            currentBgColor.copy(
-                                                                                alpha = 0.3f
-                                                                            ), RoundedCornerShape(12.dp)
+                                                                if (liveLight.isColorCapable) {
+                                                                    Column(
+                                                                        modifier = Modifier
+                                                                            .fillMaxWidth()
+                                                                            .background(
+                                                                                currentBgColor.copy(
+                                                                                    alpha = 0.3f
+                                                                                ),
+                                                                                RoundedCornerShape(
+                                                                                    12.dp
+                                                                                )
+                                                                            )
+                                                                            .padding(14.dp),
+                                                                        verticalArrangement = Arrangement.spacedBy(
+                                                                            6.dp
                                                                         )
-                                                                        .padding(14.dp),
-                                                                    verticalArrangement = Arrangement.spacedBy(
-                                                                        6.dp
-                                                                    )
-                                                                ) {
-                                                                    Text(
-                                                                        "RBG CONTROL",
-                                                                        color = if (isLightOn) neonCyan else textMuted,
-                                                                        fontSize = 11.sp,
-                                                                        fontFamily = FontFamily.Monospace,
-                                                                        fontWeight = FontWeight.Bold,
-                                                                        modifier = Modifier.padding(
-                                                                            bottom = 4.dp
-                                                                        )
-                                                                    )
-
-                                                                    // RED Control Track
-                                                                    Row(
-                                                                        verticalAlignment = Alignment.CenterVertically,
-                                                                        modifier = Modifier.fillMaxWidth()
                                                                     ) {
                                                                         Text(
-                                                                            "R",
-                                                                            color = if (isLightOn) Color.Red else textMuted,
+                                                                            "RBG CONTROL",
+                                                                            color = if (isLightOn) neonCyan else textMuted,
                                                                             fontSize = 11.sp,
+                                                                            fontFamily = FontFamily.Monospace,
                                                                             fontWeight = FontWeight.Bold,
-                                                                            modifier = Modifier.width(16.dp),
-                                                                            fontFamily = FontFamily.Monospace
-                                                                        )
-                                                                        Slider(
-                                                                            value = redValue,
-                                                                            onValueChange = {
-                                                                                if (isLightOn) redValue =
-                                                                                    it
-                                                                            },
-                                                                            valueRange = 0f..255f,
-                                                                            enabled = isLightOn,
-                                                                            colors = SliderDefaults.colors(
-                                                                                thumbColor = Color.Red,
-                                                                                activeTrackColor = Color.Red.copy(
-                                                                                    alpha = 0.6f
-                                                                                )
-                                                                            ),
-                                                                            modifier = Modifier.weight(
-                                                                                1f
+                                                                            modifier = Modifier.padding(
+                                                                                bottom = 4.dp
                                                                             )
                                                                         )
-                                                                    }
 
-                                                                    // GREEN Control Track
-                                                                    Row(
-                                                                        verticalAlignment = Alignment.CenterVertically,
-                                                                        modifier = Modifier.fillMaxWidth()
-                                                                    ) {
-                                                                        Text(
-                                                                            "G",
-                                                                            color = if (isLightOn) Color.Green else textMuted,
-                                                                            fontSize = 11.sp,
-                                                                            fontWeight = FontWeight.Bold,
-                                                                            modifier = Modifier.width(16.dp),
-                                                                            fontFamily = FontFamily.Monospace
-                                                                        )
-                                                                        Slider(
-                                                                            value = greenValue,
-                                                                            onValueChange = {
-                                                                                if (isLightOn) greenValue =
-                                                                                    it
-                                                                            },
-                                                                            valueRange = 0f..255f,
-                                                                            enabled = isLightOn,
-                                                                            colors = SliderDefaults.colors(
-                                                                                thumbColor = Color.Green,
-                                                                                activeTrackColor = Color.Green.copy(
-                                                                                    alpha = 0.6f
-                                                                                )
-                                                                            ),
-                                                                            modifier = Modifier.weight(
-                                                                                1f
+                                                                        // RED Control Track
+                                                                        Row(
+                                                                            verticalAlignment = Alignment.CenterVertically,
+                                                                            modifier = Modifier.fillMaxWidth()
+                                                                        ) {
+                                                                            Text(
+                                                                                "R",
+                                                                                color = if (isLightOn) Color.Red else textMuted,
+                                                                                fontSize = 11.sp,
+                                                                                fontWeight = FontWeight.Bold,
+                                                                                modifier = Modifier.width(
+                                                                                    16.dp
+                                                                                ),
+                                                                                fontFamily = FontFamily.Monospace
                                                                             )
-                                                                        )
-                                                                    }
+                                                                            Slider(
+                                                                                value = redValue,
+                                                                                onValueChange = {
+                                                                                    if (isLightOn) redValue =
+                                                                                        it
+                                                                                },
+                                                                                valueRange = 0f..255f,
+                                                                                enabled = isLightOn,
+                                                                                colors = SliderDefaults.colors(
+                                                                                    thumbColor = Color.Red,
+                                                                                    activeTrackColor = Color.Red.copy(
+                                                                                        alpha = 0.6f
+                                                                                    )
+                                                                                ),
+                                                                                modifier = Modifier.weight(
+                                                                                    1f
+                                                                                )
+                                                                            )
+                                                                        }
 
-                                                                    // BLUE Control Track
-                                                                    Row(
-                                                                        verticalAlignment = Alignment.CenterVertically,
-                                                                        modifier = Modifier.fillMaxWidth()
-                                                                    ) {
-                                                                        Text(
-                                                                            "B",
-                                                                            color = if (isLightOn) Color.Blue else textMuted,
-                                                                            fontSize = 11.sp,
-                                                                            fontWeight = FontWeight.Bold,
-                                                                            modifier = Modifier.width(16.dp),
-                                                                            fontFamily = FontFamily.Monospace
-                                                                        )
-                                                                        Slider(
-                                                                            value = blueValue,
-                                                                            onValueChange = {
-                                                                                if (isLightOn) blueValue =
-                                                                                    it
-                                                                            },
-                                                                            valueRange = 0f..255f,
-                                                                            enabled = isLightOn,
-                                                                            colors = SliderDefaults.colors(
-                                                                                thumbColor = Color.Blue,
-                                                                                activeTrackColor = Color.Blue.copy(
-                                                                                    alpha = 0.6f
-                                                                                )
-                                                                            ),
-                                                                            modifier = Modifier.weight(
-                                                                                1f
+                                                                        // GREEN Control Track
+                                                                        Row(
+                                                                            verticalAlignment = Alignment.CenterVertically,
+                                                                            modifier = Modifier.fillMaxWidth()
+                                                                        ) {
+                                                                            Text(
+                                                                                "G",
+                                                                                color = if (isLightOn) Color.Green else textMuted,
+                                                                                fontSize = 11.sp,
+                                                                                fontWeight = FontWeight.Bold,
+                                                                                modifier = Modifier.width(
+                                                                                    16.dp
+                                                                                ),
+                                                                                fontFamily = FontFamily.Monospace
                                                                             )
-                                                                        )
+                                                                            Slider(
+                                                                                value = greenValue,
+                                                                                onValueChange = {
+                                                                                    if (isLightOn) greenValue =
+                                                                                        it
+                                                                                },
+                                                                                valueRange = 0f..255f,
+                                                                                enabled = isLightOn,
+                                                                                colors = SliderDefaults.colors(
+                                                                                    thumbColor = Color.Green,
+                                                                                    activeTrackColor = Color.Green.copy(
+                                                                                        alpha = 0.6f
+                                                                                    )
+                                                                                ),
+                                                                                modifier = Modifier.weight(
+                                                                                    1f
+                                                                                )
+                                                                            )
+                                                                        }
+
+                                                                        // BLUE Control Track
+                                                                        Row(
+                                                                            verticalAlignment = Alignment.CenterVertically,
+                                                                            modifier = Modifier.fillMaxWidth()
+                                                                        ) {
+                                                                            Text(
+                                                                                "B",
+                                                                                color = if (isLightOn) Color.Blue else textMuted,
+                                                                                fontSize = 11.sp,
+                                                                                fontWeight = FontWeight.Bold,
+                                                                                modifier = Modifier.width(
+                                                                                    16.dp
+                                                                                ),
+                                                                                fontFamily = FontFamily.Monospace
+                                                                            )
+                                                                            Slider(
+                                                                                value = blueValue,
+                                                                                onValueChange = {
+                                                                                    if (isLightOn) blueValue =
+                                                                                        it
+                                                                                },
+                                                                                valueRange = 0f..255f,
+                                                                                enabled = isLightOn,
+                                                                                colors = SliderDefaults.colors(
+                                                                                    thumbColor = Color.Blue,
+                                                                                    activeTrackColor = Color.Blue.copy(
+                                                                                        alpha = 0.6f
+                                                                                    )
+                                                                                ),
+                                                                                modifier = Modifier.weight(
+                                                                                    1f
+                                                                                )
+                                                                            )
+                                                                        }
                                                                     }
                                                                 }
                                                             }

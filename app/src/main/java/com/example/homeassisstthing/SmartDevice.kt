@@ -9,5 +9,6 @@ data class SmartDevice(
     val state: String,
     val domain: String,
     val brightness: Float = 50f,
-    val isExpanded: Boolean = false
+    val isExpanded: Boolean = false,
+    val isColorCapable: Boolean = false
 ) : Serializable
