@@ -53,6 +53,13 @@ Climate
 At the current moment this is a mock up view and doesnt do anything with Home Assistant
 This will be implemented at somepoint soon
 
+Setup Note for Home Assistant:
+For this dashboard to communicate with your global settings, create these two helpers in Home Assistant under Settings > Devices & Services > Helpers:
+
+An Input Boolean named heating_master_switch
+
+An Input Number named heating_master_target_temp (Set its range from 15 to 30 with 0.5 steps)
+
 
 Security
 
