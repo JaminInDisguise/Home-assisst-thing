@@ -9,9 +9,17 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class HomeAssistantClient(
     private val serverUrl: String,
-    private val accessToken: String,
+    val accessToken: String,
     private val onMessageReceived: (String) -> Unit
 ) {
+    // This extracts just the IP/Host and Port from your WebSocket string
+    val httpHostAddress: String by lazy {
+        serverUrl
+            .replace("wss://", "")
+            .replace("ws://", "")
+            .substringBefore("/api")
+    }
+
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
@@ -19,6 +27,9 @@ class HomeAssistantClient(
     private var webSocket: WebSocket? = null
     private val messageIdCounter = AtomicInteger(1)
     private var isDisconnectingIntentionally = false
+
+
+    var onScheduleUpdated: ((slug: String, rawStateString: String?) -> Unit)? = null
 
     fun connect() {
         isDisconnectingIntentionally = false
@@ -31,6 +42,29 @@ class HomeAssistantClient(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 // Pass raw text immediately downwards without freezing the caller layer
                 onMessageReceived(text)
+
+                // === ADD THE LIVE MATRIX SYNC INTERCEPTOR HERE ===
+                try {
+                    val json = org.json.JSONObject(text)
+                    if (json.optString("type") == "event") {
+                        val eventData = json.optJSONObject("event")?.optJSONObject("data")
+                        val entityId = eventData?.optString("entity_id") ?: ""
+
+                        // Intercept schedule mutations streaming from Home Assistant
+                        if (entityId.startsWith("input_text.") && entityId.endsWith("_schedule")) {
+                            val newStateObj = eventData?.optJSONObject("new_state")
+                            val rawMatrixString = newStateObj?.optString("state") ?: ""
+                            val extractedSlug = entityId.removePrefix("input_text.").removeSuffix("_schedule")
+
+                            if (rawMatrixString.isNotEmpty() && rawMatrixString != "unknown" && rawMatrixString != "unavailable") {
+
+                                onScheduleUpdated?.invoke(extractedSlug, rawMatrixString)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("HA_CLIENT", "Error processing live multi-device schedule sync", e)
+                }
 
                 // Route authentication lifecycle states cleanly
                 if (text.contains("\"auth_required\"")) {
@@ -205,6 +239,68 @@ class HomeAssistantClient(
         webSocket?.send(payload)
     }
 
+    fun setInputNumberHelperValue(entityId: String, value: Float) {
+        val payload = """
+    {
+        "id": ${messageIdCounter.getAndIncrement()},
+        "type": "call_service",
+        "domain": "input_number",
+        "service": "set_value",
+        "service_data": {
+            "entity_id": "$entityId",
+            "value": $value
+        }
+    }
+    """.trimIndent().replace("\n", "").replace(" ", "")
+
+        Log.d("HA_CLIENT", "Sending Helper Target Temp -> $payload")
+        val success = webSocket?.send(payload) ?: false
+        if (!success) {
+            triggerAutoReconnectIfNeeded()
+        }
+    }
+
+    fun renameHelperEntity(oldSlug: String, newSlug: String, newDisplayName: String, isNumberHelper: Boolean) {
+        val domain = if (isNumberHelper) "input_number" else "input_text"
+        val suffix = if (isNumberHelper) "target" else "schedule"
+
+        // This payload tells HA's entity registry to change both the visible name AND the entity_id
+        val payload = """
+    {
+        "id": ${messageIdCounter.getAndIncrement()},
+        "type": "config/entity_registry/update",
+        "entity_id": "$domain.${oldSlug}_$suffix",
+        "name": "${newDisplayName} ${if(isNumberHelper) "Target" else "Schedule"}",
+        "new_entity_id": "$domain.${newSlug}_$suffix"
+    }
+    """.trimIndent().replace("\n", "")
+
+        Log.d("HA_CLIENT", "Requesting HA registry rename: $payload")
+        val success = webSocket?.send(payload) ?: false
+        if (!success) {
+            triggerAutoReconnectIfNeeded()
+        }
+    }
+
+    fun deleteHelperEntity(slug: String, isNumberHelper: Boolean) {
+        val domain = if (isNumberHelper) "input_number" else "input_text"
+        val suffix = if (isNumberHelper) "target" else "schedule"
+
+        val payload = """
+    {
+        "id": ${messageIdCounter.getAndIncrement()},
+        "type": "config/entity_registry/remove",
+        "entity_id": "$domain.${slug}_$suffix"
+    }
+    """.trimIndent().replace("\n", "")
+
+        Log.d("HA_CLIENT", "Requesting HA registry removal: $payload")
+        val success = webSocket?.send(payload) ?: false
+        if (!success) {
+            triggerAutoReconnectIfNeeded()
+        }
+    }
+
     fun setClimateHvacMode(entityId: String, hvacMode: String) {
         val payload = """
         {
@@ -221,6 +317,122 @@ class HomeAssistantClient(
 
         Log.d("HA_CLIENT", "Sending HVAC Mode -> $payload")
         webSocket?.send(payload)
+    }
+
+    fun updateRoomScheduleMatrix(entityId: String, slots: List<ClimateScheduleSlot>, isEngineEnabled: Boolean) {
+        try {
+            // 1. Build an ultra-compact lightweight string format: "time,temp,heating,day;time,temp,heating,day"
+            // We drop the long 36-character ID completely because the app generates clean IDs on load!
+            val compactString = slots.joinToString(separator = ";") { slot ->
+                val heatingBit = if (slot.isHeatingOn) "1" else "0"
+                "${slot.time},${slot.targetTemp},$heatingBit,${slot.dayTarget}"
+            }
+
+            // 2. Construct the native Home Assistant WebSocket command structure with our tiny string
+            val wsPayload = """
+        {
+            "id": ${messageIdCounter.getAndIncrement()},
+            "type": "call_service",
+            "domain": "input_text",
+            "service": "set_value",
+            "service_data": {
+                "entity_id": "$entityId",
+                "value": ${org.json.JSONObject.quote(compactString)}
+            }
+        }
+        """.trimIndent().replace("\n", "")
+
+            Log.d("HA_CLIENT", "Sending Compact Schedule Matrix -> $wsPayload")
+
+            // 3. Fire it off safely over the socket connection
+            val success = webSocket?.send(wsPayload) ?: false
+            if (!success) {
+                Log.e("HA_CLIENT", "Failed to send schedule packet - socket dead.")
+                triggerAutoReconnectIfNeeded()
+            }
+        } catch (e: Exception) {
+            Log.e("HA_CLIENT", "Error generating compact schedule payload", e)
+        }
+    }
+
+    fun createHelperEntities(zoneName: String) {
+        try {
+            val cleanSlug = zoneName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
+
+            // 1. WebSocket payload for the input_number helper
+            val numberPayload = """
+        {
+            "id": ${messageIdCounter.getAndIncrement()},
+            "type": "input_number/create",
+            "name": "$zoneName Target",
+            "min": 5.0,
+            "max": 30.0,
+            "step": 0.5,
+            "mode": "box",
+            "unit_of_measurement": "°C",
+            "icon": "mdi:thermometer"
+        }
+        """.trimIndent().replace("\n", "")
+
+            // 2. WebSocket payload for the input_text helper
+            val textPayload = """
+        {
+            "id": ${messageIdCounter.getAndIncrement()},
+            "type": "input_text/create",
+            "name": "$zoneName Schedule",
+            "min": 0,
+            "max": 255,
+            "mode": "text",
+            "icon": "mdi:calendar-clock"
+        }
+        """.trimIndent().replace("\n", "")
+
+            // Send them both instantly over the active WebSocket channel
+            webSocket?.send(numberPayload)
+            webSocket?.send(textPayload)
+            Log.d("HA_CLIENT", "Sent helper creation WebSocket requests for $zoneName")
+        } catch (e: Exception) {
+            Log.e("HA_CLIENT", "Error sending helper creation payloads", e)
+        }
+    }
+
+
+    fun parseMatrixStringToSlots(rawString: String): List<ClimateScheduleSlot>? {
+        val cleanString = rawString.trim()
+
+        // 1. GUARD: If it's uninitialized on HA, return null (NOT an empty list)
+        if (cleanString.isBlank() ||
+            cleanString.equals("unknown", ignoreCase = true) ||
+            cleanString.equals("unavailable", ignoreCase = true)) {
+            return null
+        }
+
+        val slotsList = mutableListOf<ClimateScheduleSlot>()
+        // 2. Explicit Empty: If the user deliberately cleared the schedule, return a valid empty list
+        if (cleanString == "[]") return slotsList
+
+        try {
+            val cleanInput = cleanString.removePrefix("[").removeSuffix("]")
+            val segments = cleanInput.split("],[", "], [")
+
+            for (segment in segments) {
+                val parts = segment.replace("[", "").replace("]", "").split("|")
+                if (parts.size >= 4) {
+                    slotsList.add(
+                        ClimateScheduleSlot(
+                            id = java.util.UUID.randomUUID().toString(),
+                            time = parts[0].trim(),
+                            dayTarget = parts[1].trim(),
+                            isHeatingOn = parts[2].trim().equals("ON", ignoreCase = true),
+                            targetTemp = parts[3].trim().toFloatOrNull() ?: 20.0f
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("DECODER", "Error rebuilding matrix data payload", e)
+        }
+        return slotsList
     }
 
     fun disconnect() {
