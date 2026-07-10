@@ -50,14 +50,20 @@ class HomeAssistantClient(
                         val eventData = json.optJSONObject("event")?.optJSONObject("data")
                         val entityId = eventData?.optString("entity_id") ?: ""
 
-                        // Intercept schedule mutations streaming from Home Assistant
-                        if (entityId.startsWith("input_text.") && entityId.endsWith("_schedule")) {
+                        // Matches 'input_text.' followed by anything, then '_schedule', optionally followed by '_number' at the end
+                        // Examples: input_text.kitchen_schedule, input_text.living_room_schedule_2
+                        val scheduleRegex = Regex("^input_text\\.(.+)_schedule(?:_\\d+)?$")
+                        val matchResult = scheduleRegex.find(entityId)
+
+                        if (matchResult != null) {
+                            // Group 1 extracts just the room name slug (e.g., "kitchen" or "living_room")
+                            val extractedSlug = matchResult.groupValues[1]
+
                             val newStateObj = eventData?.optJSONObject("new_state")
                             val rawMatrixString = newStateObj?.optString("state") ?: ""
-                            val extractedSlug = entityId.removePrefix("input_text.").removeSuffix("_schedule")
 
                             if (rawMatrixString.isNotEmpty() && rawMatrixString != "unknown" && rawMatrixString != "unavailable") {
-
+                                Log.d("HA_DISCOVERY", "Live sync caught schedule for slug: $extractedSlug (Full ID: $entityId)")
                                 onScheduleUpdated?.invoke(extractedSlug, rawMatrixString)
                             }
                         }
@@ -260,31 +266,30 @@ class HomeAssistantClient(
         }
     }
 
-    fun renameHelperEntity(oldSlug: String, newSlug: String, newDisplayName: String, isNumberHelper: Boolean) {
-        val domain = if (isNumberHelper) "input_number" else "input_text"
-        val suffix = if (isNumberHelper) "target" else "schedule"
+    fun renameHelperEntity(oldSlug: String, newSlug: String, newDisplayName: String, suffix: String) {
+        val domain = if (suffix == "target") "input_number" else "input_text"
 
-        // This payload tells HA's entity registry to change both the visible name AND the entity_id
         val payload = """
     {
         "id": ${messageIdCounter.getAndIncrement()},
         "type": "config/entity_registry/update",
         "entity_id": "$domain.${oldSlug}_$suffix",
-        "name": "${newDisplayName} ${if(isNumberHelper) "Target" else "Schedule"}",
+        "name": "${newDisplayName} ${suffix.replaceFirstChar { it.uppercase() }}",
         "new_entity_id": "$domain.${newSlug}_$suffix"
     }
     """.trimIndent().replace("\n", "")
 
         Log.d("HA_CLIENT", "Requesting HA registry rename: $payload")
-        val success = webSocket?.send(payload) ?: false
-        if (!success) {
-            triggerAutoReconnectIfNeeded()
-        }
+        webSocket?.send(payload)
+        
+        // Force refresh
+        Handler(Looper.getMainLooper()).postDelayed({
+            webSocket?.let { requestInitialStates(it) }
+        }, 1000)
     }
 
-    fun deleteHelperEntity(slug: String, isNumberHelper: Boolean) {
-        val domain = if (isNumberHelper) "input_number" else "input_text"
-        val suffix = if (isNumberHelper) "target" else "schedule"
+    fun deleteHelperEntity(slug: String, suffix: String) {
+        val domain = if (suffix == "target") "input_number" else "input_text"
 
         val payload = """
     {
@@ -295,10 +300,12 @@ class HomeAssistantClient(
     """.trimIndent().replace("\n", "")
 
         Log.d("HA_CLIENT", "Requesting HA registry removal: $payload")
-        val success = webSocket?.send(payload) ?: false
-        if (!success) {
-            triggerAutoReconnectIfNeeded()
-        }
+        webSocket?.send(payload)
+        
+        // Force refresh
+        Handler(Looper.getMainLooper()).postDelayed({
+            webSocket?.let { requestInitialStates(it) }
+        }, 1000)
     }
 
     fun setClimateHvacMode(entityId: String, hvacMode: String) {
@@ -357,9 +364,7 @@ class HomeAssistantClient(
 
     fun createHelperEntities(zoneName: String) {
         try {
-            val cleanSlug = zoneName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-
-            // 1. WebSocket payload for the input_number helper
+            // 1. WebSocket payload for the input_number helper (Target Temp)
             val numberPayload = """
         {
             "id": ${messageIdCounter.getAndIncrement()},
@@ -374,8 +379,8 @@ class HomeAssistantClient(
         }
         """.trimIndent().replace("\n", "")
 
-            // 2. WebSocket payload for the input_text helper
-            val textPayload = """
+            // 2. WebSocket payload for the input_text helper (Schedule)
+            val schedulePayload = """
         {
             "id": ${messageIdCounter.getAndIncrement()},
             "type": "input_text/create",
@@ -387,52 +392,48 @@ class HomeAssistantClient(
         }
         """.trimIndent().replace("\n", "")
 
-            // Send them both instantly over the active WebSocket channel
+            // 3. WebSocket payload for the input_text helper (Sensors Mapping)
+            val sensorsPayload = """
+        {
+            "id": ${messageIdCounter.getAndIncrement()},
+            "type": "input_text/create",
+            "name": "$zoneName Sensors",
+            "min": 0,
+            "max": 255,
+            "mode": "text",
+            "icon": "mdi:leak"
+        }
+        """.trimIndent().replace("\n", "")
+
             webSocket?.send(numberPayload)
-            webSocket?.send(textPayload)
-            Log.d("HA_CLIENT", "Sent helper creation WebSocket requests for $zoneName")
+            webSocket?.send(schedulePayload)
+            webSocket?.send(sensorsPayload)
+            
+            // 4. Force a state refresh so the new entities appear in deviceList immediately
+            Handler(Looper.getMainLooper()).postDelayed({
+                webSocket?.let { requestInitialStates(it) }
+            }, 1500)
+
+            Log.d("HA_CLIENT", "Sent creation requests for $zoneName helpers")
         } catch (e: Exception) {
             Log.e("HA_CLIENT", "Error sending helper creation payloads", e)
         }
     }
 
-
-    fun parseMatrixStringToSlots(rawString: String): List<ClimateScheduleSlot>? {
-        val cleanString = rawString.trim()
-
-        // 1. GUARD: If it's uninitialized on HA, return null (NOT an empty list)
-        if (cleanString.isBlank() ||
-            cleanString.equals("unknown", ignoreCase = true) ||
-            cleanString.equals("unavailable", ignoreCase = true)) {
-            return null
-        }
-
-        val slotsList = mutableListOf<ClimateScheduleSlot>()
-        // 2. Explicit Empty: If the user deliberately cleared the schedule, return a valid empty list
-        if (cleanString == "[]") return slotsList
-
-        try {
-            val cleanInput = cleanString.removePrefix("[").removeSuffix("]")
-            val segments = cleanInput.split("],[", "], [")
-
-            for (segment in segments) {
-                val parts = segment.replace("[", "").replace("]", "").split("|")
-                if (parts.size >= 4) {
-                    slotsList.add(
-                        ClimateScheduleSlot(
-                            id = java.util.UUID.randomUUID().toString(),
-                            time = parts[0].trim(),
-                            dayTarget = parts[1].trim(),
-                            isHeatingOn = parts[2].trim().equals("ON", ignoreCase = true),
-                            targetTemp = parts[3].trim().toFloatOrNull() ?: 20.0f
-                        )
-                    )
-                }
+    fun updateRoomSensors(roomSlug: String, tempId: String, humId: String) {
+        val payload = """
+        {
+            "id": ${messageIdCounter.getAndIncrement()},
+            "type": "call_service",
+            "domain": "input_text",
+            "service": "set_value",
+            "service_data": {
+                "entity_id": "input_text.${roomSlug}_sensors",
+                "value": "$tempId|$humId"
             }
-        } catch (e: Exception) {
-            Log.e("DECODER", "Error rebuilding matrix data payload", e)
         }
-        return slotsList
+        """.trimIndent().replace("\n", "")
+        webSocket?.send(payload)
     }
 
     fun disconnect() {
