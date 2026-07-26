@@ -2,7 +2,6 @@ package com.example.homeassisstthing
 
 import java.io.Serializable
 
-// Using Serializable bypasses the need for the Gradle plugin entirely
 data class SmartDevice(
     val entityId: String,
     val friendlyName: String,
@@ -12,5 +11,6 @@ data class SmartDevice(
     val isExpanded: Boolean = false,
     val isColorCapable: Boolean = false,
     val currentTemperature: Float = 0f,
-    val targetTemperature: Float = 0f
+    val targetTemperature: Float = 0f,
+    val attributes: Map<String, Any> = emptyMap()
 ) : Serializable

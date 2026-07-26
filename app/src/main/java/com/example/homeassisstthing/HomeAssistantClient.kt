@@ -3,7 +3,16 @@ package com.example.homeassisstthing
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import okhttp3.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -12,7 +21,6 @@ class HomeAssistantClient(
     val accessToken: String,
     private val onMessageReceived: (String) -> Unit
 ) {
-    // This extracts just the IP/Host and Port from your WebSocket string
     val httpHostAddress: String by lazy {
         serverUrl
             .replace("wss://", "")
@@ -28,8 +36,8 @@ class HomeAssistantClient(
     private val messageIdCounter = AtomicInteger(1)
     private var isDisconnectingIntentionally = false
 
-
     var onScheduleUpdated: ((slug: String, rawStateString: String?) -> Unit)? = null
+    var onStatusChanged: ((String) -> Unit)? = null
 
     fun connect() {
         isDisconnectingIntentionally = false
@@ -37,28 +45,23 @@ class HomeAssistantClient(
         val request = Request.Builder().url(serverUrl).build()
 
         Log.d("HA_CLIENT", "Attempting connection to $serverUrl")
+        onStatusChanged?.invoke("Connecting...")
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) {
-                // Pass raw text immediately downwards without freezing the caller layer
                 onMessageReceived(text)
 
-                // === ADD THE LIVE MATRIX SYNC INTERCEPTOR HERE ===
                 try {
                     val json = org.json.JSONObject(text)
                     if (json.optString("type") == "event") {
                         val eventData = json.optJSONObject("event")?.optJSONObject("data")
                         val entityId = eventData?.optString("entity_id") ?: ""
 
-                        // Matches 'input_text.' followed by anything, then '_schedule', optionally followed by '_number' at the end
-                        // Examples: input_text.kitchen_schedule, input_text.living_room_schedule_2
                         val scheduleRegex = Regex("^input_text\\.(.+)_schedule(?:_\\d+)?$")
                         val matchResult = scheduleRegex.find(entityId)
 
                         if (matchResult != null) {
-                            // Group 1 extracts just the room name slug (e.g., "kitchen" or "living_room")
                             val extractedSlug = matchResult.groupValues[1]
-
                             val newStateObj = eventData?.optJSONObject("new_state")
                             val rawMatrixString = newStateObj?.optString("state") ?: ""
 
@@ -72,12 +75,12 @@ class HomeAssistantClient(
                     Log.e("HA_CLIENT", "Error processing live multi-device schedule sync", e)
                 }
 
-                // Route authentication lifecycle states cleanly
                 if (text.contains("\"auth_required\"")) {
                     sendAuth()
                 }
                 if (text.contains("\"auth_ok\"")) {
                     Log.i("HA_CLIENT", "Auth Successful. Subscribing to event matrices...")
+                    onStatusChanged?.invoke("Connected")
                     subscribeToEvents(webSocket)
                     requestInitialStates(webSocket)
                 }
@@ -85,12 +88,14 @@ class HomeAssistantClient(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.w("HA_CLIENT", "Socket closed clean. Code: $code | Reason: $reason")
+                onStatusChanged?.invoke("Disconnected")
                 triggerAutoReconnectIfNeeded()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                val errorBody = try { response?.body?.string() } catch(e: Exception) { null }
+                val errorBody = try { response?.body?.string() } catch (e: Exception) { null }
                 Log.e("HA_CLIENT", "Connection failure detected: ${t.message}. Body: $errorBody")
+                onStatusChanged?.invoke("Failed: ${t.message ?: "Unknown Error"}")
                 triggerAutoReconnectIfNeeded()
             }
         })
@@ -99,6 +104,7 @@ class HomeAssistantClient(
     private fun triggerAutoReconnectIfNeeded() {
         if (!isDisconnectingIntentionally) {
             Log.w("HA_CLIENT", "Unexpected disconnection. Retrying linkage in 3 seconds...")
+            onStatusChanged?.invoke("Reconnecting...")
             Handler(Looper.getMainLooper()).postDelayed({
                 connect()
             }, 3000)
@@ -110,7 +116,21 @@ class HomeAssistantClient(
     }
 
     private fun subscribeToEvents(webSocket: WebSocket) {
-        webSocket.send("""{"id": ${messageIdCounter.getAndIncrement()}, "type": "subscribe_events", "event_type": "state_changed"}""")
+        webSocket.send("""
+        {
+            "id": ${messageIdCounter.getAndIncrement()}, 
+            "type": "subscribe_events", 
+            "event_type": "state_changed"
+        }
+        """.trimIndent().replace("\n", ""))
+
+        webSocket.send("""
+        {
+            "id": ${messageIdCounter.getAndIncrement()}, 
+            "type": "subscribe_events", 
+            "event_type": "entity_registry_updated"
+        }
+        """.trimIndent().replace("\n", ""))
     }
 
     private fun requestInitialStates(webSocket: WebSocket) {
@@ -124,16 +144,12 @@ class HomeAssistantClient(
         Log.d("HA_CLIENT", "Sending payload -> $payload")
         val success = webSocket?.send(payload) ?: false
         if (!success) {
-            Log.e("HA_CLIENT", "Failed to send packet - socket may be dead. Triggering re-verification...")
             triggerAutoReconnectIfNeeded()
         }
     }
 
     fun setLightBrightness(entityId: String, brightnessPercent: Float) {
-        // Convert 1-100% slider value to Home Assistant's native 0-255 range
         val haBrightness = ((brightnessPercent / 100f) * 255).toInt().coerceIn(0, 255)
-
-        // This builds the payload safely using your atomic message ID counter
         val payload = """
             {
                 "id": ${messageIdCounter.getAndIncrement()},
@@ -145,12 +161,11 @@ class HomeAssistantClient(
                     "brightness": $haBrightness
                 }
             }
-        """.trimIndent().replace("\n", "").replace(" ", "")
+        """.trimIndent().replace("\n", "")
 
         Log.d("HA_CLIENT", "Sending brightness payload -> $payload")
         val success = webSocket?.send(payload) ?: false
         if (!success) {
-            Log.e("HA_CLIENT", "Failed to send brightness packet - socket may be dead.")
             triggerAutoReconnectIfNeeded()
         }
     }
@@ -190,13 +205,11 @@ class HomeAssistantClient(
         Log.d("HA_CLIENT", "Sending RGB payload -> $payload")
         val success = webSocket?.send(payload) ?: false
         if (!success) {
-            Log.e("HA_CLIENT", "Failed to send RGB packet - socket may be dead.")
             triggerAutoReconnectIfNeeded()
         }
     }
 
     fun startSleepTimer(entityId: String, minutes: Int) {
-        // This utilizes Home Assistant's built-in script engine to fire a delayed shutdown service call
         val payload = """
             {
                 "id": ${messageIdCounter.getAndIncrement()},
@@ -212,8 +225,6 @@ class HomeAssistantClient(
             }
         """.trimIndent().replace("\n", "").replace(" ", "")
 
-        // Note: For an immediate local solution without a pre-configured script on HA,
-        // you can also trigger a standard 'homeassistant.turn_off' command via an app-side coroutine timer!
         Log.d("HA_CLIENT", "Sending sleep timer payload -> $payload")
         webSocket?.send(payload)
     }
@@ -222,7 +233,6 @@ class HomeAssistantClient(
         Log.d("HA_CLIENT", "Sending custom payload -> $jsonString")
         val success = webSocket?.send(jsonString) ?: false
         if (!success) {
-            Log.e("HA_CLIENT", "Failed to send custom payload - socket may be dead.")
             triggerAutoReconnectIfNeeded()
         }
     }
@@ -239,7 +249,7 @@ class HomeAssistantClient(
                 "temperature": $targetTemp
             }
         }
-    """.trimIndent().replace("\n", "").replace(" ", "")
+        """.trimIndent().replace("\n", "").replace(" ", "")
 
         Log.d("HA_CLIENT", "Sending Target Temp -> $payload")
         webSocket?.send(payload)
@@ -247,17 +257,17 @@ class HomeAssistantClient(
 
     fun setInputNumberHelperValue(entityId: String, value: Float) {
         val payload = """
-    {
-        "id": ${messageIdCounter.getAndIncrement()},
-        "type": "call_service",
-        "domain": "input_number",
-        "service": "set_value",
-        "service_data": {
-            "entity_id": "$entityId",
-            "value": $value
+        {
+            "id": ${messageIdCounter.getAndIncrement()},
+            "type": "call_service",
+            "domain": "input_number",
+            "service": "set_value",
+            "service_data": {
+                "entity_id": "$entityId",
+                "value": $value
+            }
         }
-    }
-    """.trimIndent().replace("\n", "").replace(" ", "")
+        """.trimIndent().replace("\n", "").replace(" ", "")
 
         Log.d("HA_CLIENT", "Sending Helper Target Temp -> $payload")
         val success = webSocket?.send(payload) ?: false
@@ -266,46 +276,49 @@ class HomeAssistantClient(
         }
     }
 
-    fun renameHelperEntity(oldSlug: String, newSlug: String, newDisplayName: String, suffix: String) {
+    suspend fun renameHelperEntity(fullOldEntityId: String, newSlug: String, newDisplayName: String, suffix: String) {
         val domain = if (suffix == "target") "input_number" else "input_text"
 
         val payload = """
-    {
-        "id": ${messageIdCounter.getAndIncrement()},
-        "type": "config/entity_registry/update",
-        "entity_id": "$domain.${oldSlug}_$suffix",
-        "name": "${newDisplayName} ${suffix.replaceFirstChar { it.uppercase() }}",
-        "new_entity_id": "$domain.${newSlug}_$suffix"
-    }
-    """.trimIndent().replace("\n", "")
+        {
+            "id": ${messageIdCounter.getAndIncrement()},
+            "type": "config/entity_registry/update",
+            "entity_id": "$fullOldEntityId",
+            "name": "${newDisplayName} ${suffix.replaceFirstChar { it.uppercase() }}",
+            "new_entity_id": "$domain.${newSlug}_$suffix"
+        }
+        """.trimIndent().replace("\n", "")
 
         Log.d("HA_CLIENT", "Requesting HA registry rename: $payload")
         webSocket?.send(payload)
-        
-        // Force refresh
-        Handler(Looper.getMainLooper()).postDelayed({
-            webSocket?.let { requestInitialStates(it) }
-        }, 1000)
+        delay(250)
     }
 
-    fun deleteHelperEntity(slug: String, suffix: String) {
-        val domain = if (suffix == "target") "input_number" else "input_text"
+    fun triggerStateRefresh() {
+        webSocket?.let { ws ->
+            requestInitialStates(ws)
+        }
+    }
+
+    suspend fun deleteHelperEntity(exactEntityId: String) {
+        val payloadId = messageIdCounter.incrementAndGet()
 
         val payload = """
-    {
-        "id": ${messageIdCounter.getAndIncrement()},
-        "type": "config/entity_registry/remove",
-        "entity_id": "$domain.${slug}_$suffix"
-    }
-    """.trimIndent().replace("\n", "")
+        {
+            "id": $payloadId,
+            "type": "config/entity_registry/remove",
+            "entity_id": "$exactEntityId"
+        }
+        """.trimIndent().replace("\n", "")
 
-        Log.d("HA_CLIENT", "Requesting HA registry removal: $payload")
-        webSocket?.send(payload)
-        
-        // Force refresh
-        Handler(Looper.getMainLooper()).postDelayed({
-            webSocket?.let { requestInitialStates(it) }
-        }, 1000)
+        Log.d("HA_CLIENT", "Requesting HA registry removal [MsgID: $payloadId]: $payload")
+
+        val sentSuccessfully = webSocket?.send(payload) ?: false
+        if (!sentSuccessfully) {
+            Log.e("HA_CLIENT", "Failed to transmit removal payload for $exactEntityId (WebSocket is null or closed)")
+        }
+
+        delay(250)
     }
 
     fun setClimateHvacMode(entityId: String, hvacMode: String) {
@@ -320,7 +333,7 @@ class HomeAssistantClient(
                 "hvac_mode": "${hvacMode.lowercase()}"
             }
         }
-    """.trimIndent().replace("\n", "").replace(" ", "")
+        """.trimIndent().replace("\n", "").replace(" ", "")
 
         Log.d("HA_CLIENT", "Sending HVAC Mode -> $payload")
         webSocket?.send(payload)
@@ -328,30 +341,26 @@ class HomeAssistantClient(
 
     fun updateRoomScheduleMatrix(entityId: String, slots: List<ClimateScheduleSlot>, isEngineEnabled: Boolean) {
         try {
-            // 1. Build an ultra-compact lightweight string format: "time,temp,heating,day;time,temp,heating,day"
-            // We drop the long 36-character ID completely because the app generates clean IDs on load!
             val compactString = slots.joinToString(separator = ";") { slot ->
                 val heatingBit = if (slot.isHeatingOn) "1" else "0"
                 "${slot.time},${slot.targetTemp},$heatingBit,${slot.dayTarget}"
             }
 
-            // 2. Construct the native Home Assistant WebSocket command structure with our tiny string
             val wsPayload = """
-        {
-            "id": ${messageIdCounter.getAndIncrement()},
-            "type": "call_service",
-            "domain": "input_text",
-            "service": "set_value",
-            "service_data": {
-                "entity_id": "$entityId",
-                "value": ${org.json.JSONObject.quote(compactString)}
+            {
+                "id": ${messageIdCounter.getAndIncrement()},
+                "type": "call_service",
+                "domain": "input_text",
+                "service": "set_value",
+                "service_data": {
+                    "entity_id": "$entityId",
+                    "value": ${org.json.JSONObject.quote(compactString)}
+                }
             }
-        }
-        """.trimIndent().replace("\n", "")
+            """.trimIndent().replace("\n", "")
 
             Log.d("HA_CLIENT", "Sending Compact Schedule Matrix -> $wsPayload")
 
-            // 3. Fire it off safely over the socket connection
             val success = webSocket?.send(wsPayload) ?: false
             if (!success) {
                 Log.e("HA_CLIENT", "Failed to send schedule packet - socket dead.")
@@ -364,52 +373,48 @@ class HomeAssistantClient(
 
     fun createHelperEntities(zoneName: String) {
         try {
-            // 1. WebSocket payload for the input_number helper (Target Temp)
             val numberPayload = """
-        {
-            "id": ${messageIdCounter.getAndIncrement()},
-            "type": "input_number/create",
-            "name": "$zoneName Target",
-            "min": 5.0,
-            "max": 30.0,
-            "step": 0.5,
-            "mode": "box",
-            "unit_of_measurement": "°C",
-            "icon": "mdi:thermometer"
-        }
-        """.trimIndent().replace("\n", "")
+            {
+                "id": ${messageIdCounter.getAndIncrement()},
+                "type": "input_number/create",
+                "name": "$zoneName Target",
+                "min": 5.0,
+                "max": 30.0,
+                "step": 0.5,
+                "mode": "box",
+                "unit_of_measurement": "°C",
+                "icon": "mdi:thermometer"
+            }
+            """.trimIndent().replace("\n", "")
 
-            // 2. WebSocket payload for the input_text helper (Schedule)
             val schedulePayload = """
-        {
-            "id": ${messageIdCounter.getAndIncrement()},
-            "type": "input_text/create",
-            "name": "$zoneName Schedule",
-            "min": 0,
-            "max": 255,
-            "mode": "text",
-            "icon": "mdi:calendar-clock"
-        }
-        """.trimIndent().replace("\n", "")
+            {
+                "id": ${messageIdCounter.getAndIncrement()},
+                "type": "input_text/create",
+                "name": "$zoneName Schedule",
+                "min": 0,
+                "max": 255,
+                "mode": "text",
+                "icon": "mdi:calendar-clock"
+            }
+            """.trimIndent().replace("\n", "")
 
-            // 3. WebSocket payload for the input_text helper (Sensors Mapping)
             val sensorsPayload = """
-        {
-            "id": ${messageIdCounter.getAndIncrement()},
-            "type": "input_text/create",
-            "name": "$zoneName Sensors",
-            "min": 0,
-            "max": 255,
-            "mode": "text",
-            "icon": "mdi:leak"
-        }
-        """.trimIndent().replace("\n", "")
+            {
+                "id": ${messageIdCounter.getAndIncrement()},
+                "type": "input_text/create",
+                "name": "$zoneName Sensors",
+                "min": 0,
+                "max": 255,
+                "mode": "text",
+                "icon": "mdi:leak"
+            }
+            """.trimIndent().replace("\n", "")
 
             webSocket?.send(numberPayload)
             webSocket?.send(schedulePayload)
             webSocket?.send(sensorsPayload)
-            
-            // 4. Force a state refresh so the new entities appear in deviceList immediately
+
             Handler(Looper.getMainLooper()).postDelayed({
                 webSocket?.let { requestInitialStates(it) }
             }, 1500)
@@ -433,6 +438,90 @@ class HomeAssistantClient(
             }
         }
         """.trimIndent().replace("\n", "")
+        webSocket?.send(payload)
+    }
+
+    suspend fun createGenericThermostat(
+        roomSlug: String,
+        tempSensorEntityId: String,
+        switchEntityId: String
+    ) {
+        withContext(Dispatchers.IO) {
+            try {
+                val httpBaseUrl = serverUrl
+                    .replace("wss://", "https://")
+                    .replace("ws://", "http://")
+                    .substringBefore("/api")
+
+                val endpoint = "$httpBaseUrl/api/config/climate/config/${roomSlug}_climate"
+
+                val jsonPayload = org.json.JSONObject().apply {
+                    put("name", "${roomSlug.replace('_', ' ').uppercase()} HEATING")
+                    put("heater", switchEntityId)
+                    put("target_sensor", tempSensorEntityId)
+                    put("min_temp", 7.0)
+                    put("max_temp", 28.0)
+                    put("ac_mode", false)
+                    put("cold_tolerance", 0.3)
+                    put("hot_tolerance", 0.3)
+                }
+
+                val body = RequestBody.create(
+                    "application/json; charset=utf-8".toMediaType(),
+                    jsonPayload.toString()
+                )
+
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .addHeader("Authorization", "Bearer $accessToken")
+                    .post(body)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        Log.i("HA_CLIENT", "Successfully provisioned generic thermostat: ${roomSlug}_climate")
+                        triggerStateRefresh()
+                    } else {
+                        Log.e("HA_CLIENT", "Failed to provision thermostat. Code: ${response.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("HA_CLIENT", "Exception provisioning generic thermostat", e)
+            }
+        }
+    }
+
+    fun callService(domain: String, service: String, entityId: String, serviceData: Map<String, Any> = emptyMap()) {
+        val payloadMap = mutableMapOf<String, Any>(
+            "id" to messageIdCounter.getAndIncrement(),
+            "type" to "call_service",
+            "domain" to domain,
+            "service" to service,
+            "target" to mapOf("entity_id" to entityId)
+        )
+        if (serviceData.isNotEmpty()) {
+            payloadMap["service_data"] = serviceData
+        }
+
+        val jsonPayload = org.json.JSONObject(payloadMap).toString()
+        webSocket?.send(jsonPayload)
+    }
+
+    fun setPresetMode(entityId: String, presetMode: String) {
+        val payload = """
+    {
+        "id": ${messageIdCounter.getAndIncrement()},
+        "type": "call_service",
+        "domain": "climate",
+        "service": "set_preset_mode",
+        "service_data": {
+            "entity_id": "$entityId",
+            "preset_mode": "${presetMode.lowercase()}"
+        }
+    }
+    """.trimIndent().replace("\n", "").replace(" ", "")
+
+        Log.d("HA_CLIENT", "Sending Preset Mode -> $payload")
         webSocket?.send(payload)
     }
 

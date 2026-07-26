@@ -78,6 +78,8 @@ fun SettingsView(
     onSleepTimeAdjustment: (hour: Int, minute: Int) -> Unit,
     onWakeTimeAdjustment: (hour: Int, minute: Int) -> Unit,
     onWakeDurationChange: (Float) -> Unit,
+    schedulePath: String,
+    onSchedulePathChange: (String) -> Unit,
 
     // External Core Actions
     onApplyAndReconnectHA: (ip: String, token: String) -> Unit,
@@ -481,6 +483,26 @@ fun SettingsView(
                                 unfocusedBorderColor = textMuted.copy(alpha = 0.3f),
                                 focusedLabelColor = neonCyan
                             )
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = schedulePath,
+                            onValueChange = { newPath ->
+                                onSchedulePathChange(newPath)
+                            },
+                            label = { Text("Schedule Dashboard Path",fontSize = 10.sp, fontFamily = FontFamily.Monospace) },
+                            placeholder = { Text("e.g. schedule or heating-schedule") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            textStyle = TextStyle(color = currentTextColor, fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = neonCyan,
+                                unfocusedBorderColor = textMuted.copy(alpha = 0.3f),
+                                focusedLabelColor = neonCyan
+                            )
+
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))

@@ -1,346 +1,483 @@
 package com.example.homeassisstthing
 
-import android.util.Log
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.collections.filter
-import kotlin.collections.map
-import kotlin.collections.plus
-import kotlin.collections.set
-import kotlin.collections.sortedWith
+import com.example.homeassisstthing.SmartDevice
+import kotlin.math.cos
+import kotlin.math.sin
+import android.util.Log
+import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.draw.clip
+import android.app.Activity
+import android.os.Build
+import android.webkit.WebSettings
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+
+// --- INLINE VECTOR ICONS ---
+private val IconArrowBack: ImageVector
+    get() = ImageVector.Builder(name = "ArrowBack", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+        .path(fill = androidx.compose.ui.graphics.SolidColor(Color.White)) {
+            moveTo(20f, 11f)
+            horizontalLineTo(7.83f)
+            lineTo(13.42f, 5.41f)
+            lineTo(12f, 4f)
+            lineTo(4f, 12f)
+            lineTo(12f, 20f)
+            lineTo(13.41f, 18.59f)
+            lineTo(7.83f, 13f)
+            horizontalLineTo(20f)
+            close()
+        }.build()
+
+private val IconAdd: ImageVector
+    get() = ImageVector.Builder(name = "Add", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+        .path(fill = androidx.compose.ui.graphics.SolidColor(Color.White)) {
+            moveTo(19f, 13f)
+            horizontalLineTo(13f)
+            verticalLineTo(19f)
+            horizontalLineTo(11f)
+            verticalLineTo(13f)
+            horizontalLineTo(5f)
+            verticalLineTo(11f)
+            horizontalLineTo(11f)
+            verticalLineTo(5f)
+            horizontalLineTo(13f)
+            verticalLineTo(11f)
+            horizontalLineTo(19f)
+            close()
+        }.build()
+
+private val IconRemove: ImageVector
+    get() = ImageVector.Builder(name = "Remove", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+        .path(fill = androidx.compose.ui.graphics.SolidColor(Color.White)) {
+            moveTo(19f, 13f)
+            horizontalLineTo(5f)
+            verticalLineTo(11f)
+            horizontalLineTo(19f)
+            close()
+        }.build()
+
+private val IconPower: ImageVector
+    get() = ImageVector.Builder(name = "Power", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+        .path(fill = androidx.compose.ui.graphics.SolidColor(Color.White)) {
+            moveTo(13f, 3f)
+            horizontalLineTo(11f)
+            verticalLineTo(13f)
+            horizontalLineTo(13f)
+            close()
+            moveTo(17.83f, 5.17f)
+            lineTo(16.41f, 6.59f)
+            curveTo(18.02f, 7.91f, 19f, 9.87f, 19f, 12f)
+            curveTo(19f, 15.87f, 15.87f, 19f, 12f, 19f)
+            curveTo(8.13f, 19f, 5f, 15.87f, 5f, 12f)
+            curveTo(5f, 9.87f, 5.98f, 7.91f, 7.58f, 6.58f)
+            lineTo(6.17f, 5.17f)
+            curveTo(4.21f, 6.81f, 3f, 9.26f, 3f, 12f)
+            curveTo(3f, 16.97f, 7.03f, 21f, 12f, 21f)
+            curveTo(16.97f, 21f, 21f, 16.97f, 21f, 12f)
+            curveTo(21f, 9.26f, 19.79f, 6.81f, 17.83f, 5.17f)
+            close()
+        }.build()
 
 @Composable
 fun ClimateControlTab(
-    deviceList: List<SmartDevice>,
-    haClient: HomeAssistantClient?,
-    drilledRoomIndex: Int?,
-    onDrillRoom: (Int?) -> Unit,
-    roomTargetStates: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Float>,
-    roomMappings: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Pair<String, String>>,
+    haEntities: List<SmartDevice>,
+    roomTargetStates: Map<String, Float>,
+    roomMappings: Map<String, Pair<String, String>>,
     currentBgColor: Color,
     currentTextColor: Color,
     neonCyan: Color,
     neonGreen: Color,
     textMuted: Color,
+    onToggleClimateState: (String, Boolean) -> Unit,
+    onToggleScheduleState: (String, Boolean) -> Unit,
+    onUpdateTargetTemp: (String, Float) -> Unit,
+    onSetPresetMode: (String, String) -> Unit,
+    onDrillRoom: (Int?) -> Unit,
+    drilledRoomIndex: Int?,
+    haIPAddress: String,
+    schedulePath: String = "schedule",
+    onOpenSchedule: () -> Unit,
     triggerInterfaceFeedback: () -> Unit
 ) {
-    val roomSyncCooldowns = remember { mutableStateMapOf<String, Long>() }
-    val masterSwitchEntity = "input_boolean.heating_master_switch"
+    val climateEntities = remember(haEntities) {
+        haEntities.filter { device ->
+            val id = device.entityId.lowercase()
+            val domain = device.domain.lowercase()
 
-    val roomNames: List<String> = remember(roomMappings.size, roomMappings.keys) {
-        roomMappings.keys.toList().sorted()
-    }
+            val isClimateDomain = domain == "climate" || id.startsWith("climate.")
+            val isHelperThermostat = id.contains("thermostat") &&
+                    !id.startsWith("sensor.") &&
+                    !id.startsWith("switch.") &&
+                    !id.startsWith("binary_sensor.") &&
+                    !id.startsWith("number.")
 
-    val masterSwitchDevice = deviceList.find { it.entityId == masterSwitchEntity }
-    val isMasterHeatingOn = masterSwitchDevice?.state == "ON"
+            val isDiagnosticNoise = id.contains("consumption") ||
+                    id.contains("voltage") ||
+                    id.contains("current") ||
+                    id.contains("signal") ||
+                    id.contains("cloud") ||
+                    id.contains("led") ||
+                    id.contains("auto_off") ||
+                    id.contains("overload")
 
-    val availableSensors = remember(deviceList) {
-        deviceList.filter { it.domain == "sensor" }.map { it.entityId }.sorted()
-    }
-
-    var sensoryPickerTargetMode by remember { mutableStateOf<String?>(null) }
-    val selectedRoomName = if (drilledRoomIndex != null && drilledRoomIndex < roomNames.size) roomNames[drilledRoomIndex] else ""
-
-    // Tracks whether the schedule matrix is active (True) or if the room is in full manual mode (False)
-    val roomScheduleEnabledStates = remember { mutableStateMapOf<String, Boolean>() }
-
-    // Temporary mock database mapped by room names.
-    val mockRoomSchedules = remember {
-        mutableStateMapOf<String, List<ClimateScheduleSlot>>(
-            "Airing Cupboard" to listOf(
-                ClimateScheduleSlot(time = "06:30", targetTemp = 21.5f, isHeatingOn = true, dayTarget = "WEEKDAYS"),
-                ClimateScheduleSlot(time = "09:00", targetTemp = 15.0f, isHeatingOn = false, dayTarget = "WEEKDAYS"),
-                ClimateScheduleSlot(time = "08:30", targetTemp = 22.0f, isHeatingOn = true, dayTarget = "WEEKENDS")
-            )
-        )
-    }
-
-    // =====================================================================
-    // AUTOMATIC HOME ASSISTANT DATA IMPORT ON RESTART
-    // =====================================================================
-    LaunchedEffect(deviceList, roomNames) {
-        roomNames.forEach { roomName ->
-            val dynamicSlug = roomName.lowercase().trim().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-            val targetRegex = Regex("^input_text\\.${dynamicSlug}_schedule(?:_\\d+)?$", RegexOption.IGNORE_CASE)
-            val scheduleDevice = deviceList.find { it.entityId.matches(targetRegex) }
-
-            if (scheduleDevice == null) return@forEach
-
-            val rawStateString = scheduleDevice.state
-            val lastEditTime = roomSyncCooldowns[roomName] ?: 0L
-            val isCoolingDown = (System.currentTimeMillis() - lastEditTime) < 1500L
-
-            if (!rawStateString.isNullOrEmpty() && rawStateString != "unknown" && rawStateString != "unavailable" && !isCoolingDown) {
-                try {
-                    if (rawStateString.startsWith("[")) return@forEach
-
-                    val parsedSlots = rawStateString.split(";").filter { it.isNotBlank() }.map { slotRaw ->
-                        val parts = slotRaw.split(",")
-                        ClimateScheduleSlot(
-                            id = java.util.UUID.randomUUID().toString(),
-                            time = parts.getOrNull(0) ?: "12:00",
-                            targetTemp = parts.getOrNull(1)?.toFloatOrNull() ?: 20.0f,
-                            isHeatingOn = parts.getOrNull(2) == "1",
-                            dayTarget = parts.getOrNull(3) ?: "WEEKDAYS"
-                        )
-                    }
-
-                    val currentLocal = mockRoomSchedules[roomName] ?: emptyList()
-                    val structuralLocal = currentLocal.map { "${it.time},${it.targetTemp},${it.isHeatingOn},${it.dayTarget}" }
-                    val structuralIncoming = parsedSlots.map { "${it.time},${it.targetTemp},${it.isHeatingOn},${it.dayTarget}" }
-
-                    if (structuralLocal != structuralIncoming) {
-                        mockRoomSchedules[roomName] = parsedSlots
-                    }
-                } catch (e: Exception) {
-                    Log.e("HA_RESTART", "Failed to parse compact string for $roomName: ${e.message}")
-                }
-            }
+            (isClimateDomain || isHelperThermostat) && !isDiagnosticNoise
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-
-            // ----------------------------------------------------
-            // VIEW A: MAIN ZONE DIRECTORY MATRIX (MATCHES MAIN LIGHTS PAGE)
-            // ----------------------------------------------------
-            if (drilledRoomIndex == null) {
-                // Title Header
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(currentBgColor)
+    ) {
+        if (climateEntities.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    text = "CLIMATE CONTROLS (${roomNames.size})",
+                    text = "NO CLIMATE CONTROLLERS DETECTED",
                     color = textMuted,
-                    fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    fontWeight = FontWeight.Bold
                 )
+            }
+        } else if (drilledRoomIndex != null && drilledRoomIndex in climateEntities.indices) {
+            val selectedDevice = climateEntities[drilledRoomIndex]
 
-                // Master Switch Row
+            val rawFriendlyName = selectedDevice.friendlyName.ifBlank {
+                (selectedDevice.attributes["friendly_name"] as? String)
+                    ?: selectedDevice.entityId.substringAfter(".").replace("_", " ")
+            }
+            val displayName = rawFriendlyName.replace(Regex("(?i)\\b(\\w+)\\s+\\1\\b"), "$1").trim()
+
+            val currentTemp = (selectedDevice.attributes["current_temperature"] as? Number)?.toFloat()
+                ?: selectedDevice.currentTemperature.takeIf { it > 0f }
+                ?: selectedDevice.state.toFloatOrNull()
+                ?: 20.0f
+
+            val targetTemp = roomTargetStates[selectedDevice.entityId]
+                ?: (selectedDevice.attributes["temperature"] as? Number)?.toFloat()
+                ?: (selectedDevice.attributes["target_temperature"] as? Number)?.toFloat()
+                ?: selectedDevice.targetTemperature
+                ?: 21.0f
+
+            // 1. Extract room keywords ONCE (shared by both humidity & schedule lookups)
+            val ignoreWords = setOf("climate", "heater", "thermostat", "temp", "sensors", "humidity", "device")
+            val entitySlug = selectedDevice.entityId.substringAfter("climate.").lowercase()
+            val friendlySlug = selectedDevice.friendlyName.lowercase()
+
+            val roomKeywords = (entitySlug.split("_") + friendlySlug.split(" "))
+                .map { it.filter { char -> char.isLetterOrDigit() } }
+                .filter { it.length >= 3 && !ignoreWords.contains(it) }
+                .distinct()
+
+            // 2. Dynamic Humidity Lookup
+            val climateHumidity = (selectedDevice.attributes["current_humidity"] as? Number)?.toInt()
+                ?: (selectedDevice.attributes["humidity"] as? Number)?.toInt()
+
+            val humidity = climateHumidity ?: run {
+                val matchingSensor = haEntities.find { device ->
+                    if (device.domain != "sensor") return@find false
+                    val sensorId = device.entityId.lowercase()
+                    val sensorName = device.friendlyName.lowercase()
+
+                    val isHumiditySensor = sensorId.contains("humidity") || sensorName.contains("humidity")
+                    val matchesRoom = roomKeywords.any { word -> sensorId.contains(word) || sensorName.contains(word) }
+
+                    isHumiditySensor && matchesRoom
+                }
+
+                matchingSensor?.state?.toFloatOrNull()?.toInt() ?: 45
+            }
+
+            // 3. Dynamic Schedule Lookup
+            val matchingScheduleSwitch = haEntities.find { device ->
+                if (device.domain != "switch") return@find false
+                val entityId = device.entityId.lowercase()
+                val friendlyName = device.friendlyName.lowercase()
+
+                val isSchedule = entityId.contains("schedule") || friendlyName.contains("schedule")
+                val matchesRoom = roomKeywords.any { word -> entityId.contains(word) || friendlyName.contains(word) }
+
+                isSchedule && matchesRoom
+            }
+
+            val isScheduleActive = matchingScheduleSwitch?.state == "on"
+
+            // 4. System Mode Status
+            val hvacMode = selectedDevice.state.lowercase()
+            val isPowerOn = hvacMode != "off"
+            val isHeatingMode = hvacMode == "heat" || hvacMode == "auto" || isPowerOn
+
+            // 5. Extract HVAC action attributes
+            val hvacAction = (selectedDevice.attributes["hvac_action"] as? String
+                ?: selectedDevice.attributes["action"] as? String
+                ?: selectedDevice.attributes["current_action"] as? String)?.lowercase() ?: ""
+
+            // 6. Heating Burner Status Logic
+            val isExplicitlyHeating = hvacAction == "heating" || hvacAction == "heating_up"
+            val isDemandHeating = hvacAction.isBlank() && isPowerOn && (targetTemp > currentTemp)
+            val isActivelyHeating = (isExplicitlyHeating || isDemandHeating) && isPowerOn
+
+            // 7. Preset Mode & Cycling Logic
+            val currentPreset = (selectedDevice.attributes["preset_mode"] as? String)
+                ?.lowercase()
+                ?: "none"
+
+            val rawPresetModes: List<String> = when (val raw = selectedDevice.attributes["preset_modes"]) {
+                is List<*> -> raw.mapNotNull { it?.toString()?.lowercase() }
+                is Array<*> -> raw.mapNotNull { it?.toString()?.lowercase() }
+                else -> emptyList()
+            }
+
+            val availablePresets = rawPresetModes.ifEmpty {
+                listOf("none", "away", "comfort", "eco", "home", "sleep", "activity")
+            }
+
+            val onCyclePreset: () -> Unit = {
+                triggerInterfaceFeedback()
+                val currentIndex = availablePresets.indexOfFirst { it.equals(currentPreset, ignoreCase = true) }
+                val nextIndex = if (currentIndex == -1 || currentIndex == availablePresets.lastIndex) 0 else currentIndex + 1
+                val nextPreset = availablePresets[nextIndex]
+
+                onSetPresetMode(selectedDevice.entityId, nextPreset)
+            }
+
+            Column(modifier = Modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(currentBgColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
-                        .border(1.dp, textMuted.copy(alpha = 0.15f), RoundedCornerShape(14.dp))
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text("GLOBAL HEATING", color = currentTextColor, fontSize = 15.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Text("TAP SWITCH TO ALTER RUNTIME", color = textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                    IconButton(onClick = {
+                        triggerInterfaceFeedback()
+                        onDrillRoom(null)
+                    }) {
+                        Icon(IconArrowBack, contentDescription = "Back", tint = currentTextColor)
                     }
-
-                    Box(
-                        modifier = Modifier
-                            .size(width = 75.dp, height = 38.dp)
-                            .background(if (isMasterHeatingOn) neonGreen.copy(alpha = 0.15f) else textMuted.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
-                            .border(1.dp, if (isMasterHeatingOn) neonGreen else textMuted.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
-                            .clickable {
-                                triggerInterfaceFeedback()
-                                val targetService = if (isMasterHeatingOn) "turn_off" else "turn_on"
-                                val genericSwitchJson = """{"id":${System.currentTimeMillis().toInt()},"type":"call_service","domain":"homeassistant","service":"$targetService","service_data":{"entity_id":"$masterSwitchEntity"}}""".replace(" ", "")
-                                haClient?.sendCustomJson(genericSwitchJson)
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (isMasterHeatingOn) "ON" else "OFF",
-                            color = if (isMasterHeatingOn) neonGreen else textMuted,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
+                    Text(
+                        text = displayName.uppercase(),
+                        color = currentTextColor,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
                 }
 
-                // Individual Zone Rows
-                roomNames.forEachIndexed { index, roomName ->
-                    val (tempId, _) = roomMappings[roomName] ?: Pair("", "")
-                    val sensorDevice = deviceList.find { it.entityId == tempId }
-                    val rTemp = sensorDevice?.state?.toFloatOrNull() ?: 0.0f
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(currentBgColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
-                            .border(1.dp, textMuted.copy(alpha = 0.15f), RoundedCornerShape(14.dp))
-                            .clickable { onDrillRoom(index) }
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 8.dp)
-                        ) {
-                            Text(roomName, color = currentTextColor, fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                            Text("TAP FOR ADVANCED CONTROLS", color = textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                        }
-
-                        Text(
-                            text = if (rTemp > 0f) "${String.format("%.1f", rTemp)}°C" else "--°C",
-                            color = if (rTemp > 0f) neonCyan else textMuted,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier
-                                .background(textMuted.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // REGISTER NEW CLIMATE ZONE
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .background(currentBgColor.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                        .border(1.dp, neonCyan.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                        .clickable {
-                            triggerInterfaceFeedback()
-                            val nextZoneNum = roomNames.size + 1
-                            val newZoneName = "NEW ZONE $nextZoneNum"
-                            haClient?.createHelperEntities(newZoneName)
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("+ SYSTEM REGISTER NEW CLIMATE ZONE", color = neonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                }
-
-            } else {
-                // ----------------------------------------------------
-                // DELEGATED VIEW B: ISOLATED ADVANCED CONSOLE CARD
-                // ----------------------------------------------------
-                IsolatedClimateConsole(
-                    roomName = selectedRoomName,
-                    deviceList = deviceList,
-                    haClient = haClient,
-                    onDrillRoom = onDrillRoom,
-                    roomTargetStates = roomTargetStates,
-                    roomMappings = roomMappings,
-                    roomScheduleEnabledStates = roomScheduleEnabledStates,
-                    mockRoomSchedules = mockRoomSchedules,
-                    roomSyncCooldowns = roomSyncCooldowns,
+                HardwareThermostatView(
+                    currentTemp = currentTemp,
+                    targetTemp = targetTemp,
+                    humidity = humidity,
+                    isHeatingMode = isHeatingMode && isPowerOn,
+                    isActivelyHeating = isActivelyHeating && isPowerOn,
+                    isPowerOn = isPowerOn,
+                    currentPreset = currentPreset,
+                    isScheduleActive = isScheduleActive,
+                    scheduleEntity = matchingScheduleSwitch,
                     currentBgColor = currentBgColor,
                     currentTextColor = currentTextColor,
                     neonCyan = neonCyan,
-                    neonGreen = neonGreen,
+                    haIPAddress = haIPAddress,
+                    schedulePath = schedulePath,
                     textMuted = textMuted,
-                    triggerInterfaceFeedback = triggerInterfaceFeedback,
-                    onOpenSensorPicker = { targetMode -> sensoryPickerTargetMode = targetMode }
+                    onOpenSchedule = onOpenSchedule,
+
+                    onPowerClick = {
+                        triggerInterfaceFeedback()
+                        onToggleClimateState(selectedDevice.entityId, !isPowerOn)
+                    },
+                    onDecreaseTemp = {
+                        triggerInterfaceFeedback()
+                        onUpdateTargetTemp(selectedDevice.entityId, (targetTemp - 0.5f).coerceAtLeast(7.0f))
+                    },
+                    onIncreaseTemp = {
+                        triggerInterfaceFeedback()
+                        onUpdateTargetTemp(selectedDevice.entityId, (targetTemp + 0.5f).coerceAtMost(35.0f))
+                    },
+                    onCyclePreset = {
+                        triggerInterfaceFeedback()
+                        onCyclePreset()
+                    },
+                    onToggleSchedule = {
+                        triggerInterfaceFeedback()
+                        Log.d("SCHEDULE_DEBUG", "Schedule Button Tapped! Entity Found: ${matchingScheduleSwitch?.entityId}")
+                        matchingScheduleSwitch?.entityId?.let { scheduleId ->
+                            onToggleScheduleState(scheduleId, !isScheduleActive)
+                        }
+                    }
                 )
             }
-        }
-
-        // FULL SCREEN OVERLAY PICKER
-        if (sensoryPickerTargetMode != null) {
-            val currentPair = roomMappings[selectedRoomName] ?: Pair("", "")
-
-            Box(
+        } else {
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f))
-                    .clickable { sensoryPickerTargetMode = null }
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(0.85f)
-                        .background(currentBgColor, RoundedCornerShape(16.dp))
-                        .border(2.dp, neonCyan, RoundedCornerShape(16.dp))
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(text = "CHOOSE ${sensoryPickerTargetMode} ATTACHMENT", color = neonCyan, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                    androidx.compose.material3.HorizontalDivider(color = textMuted.copy(alpha = 0.3f))
+                itemsIndexed(climateEntities) { index, device ->
+                    val rawFriendlyName = device.friendlyName.ifBlank {
+                        (device.attributes["friendly_name"] as? String)
+                            ?: device.entityId.substringAfter(".").replace("_", " ")
+                    }
+                    val displayName = rawFriendlyName.replace(Regex("(?i)\\b(\\w+)\\s+\\1\\b"), "$1").trim()
 
-                    LazyColumn(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(availableSensors) { sensorId ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(textMuted.copy(alpha = 0.06f), RoundedCornerShape(6.dp))
-                                    .border(1.dp, textMuted.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                                    .clickable {
-                                        triggerInterfaceFeedback()
-                                        val roomSlug = selectedRoomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                        val currentMapping = roomMappings[selectedRoomName] ?: Pair("", "")
+                    val currentTemp = (device.attributes["current_temperature"] as? Number)?.toFloat()
+                        ?: device.currentTemperature.takeIf { it > 0f }
+                        ?: device.state.toFloatOrNull()
+                        ?: 20.0f
 
-                                        if (sensoryPickerTargetMode == "TEMP") {
-                                            haClient?.updateRoomSensors(roomSlug, sensorId, currentMapping.second)
-                                        } else {
-                                            haClient?.updateRoomSensors(roomSlug, currentMapping.first, sensorId)
-                                        }
+                    val targetTemp = roomTargetStates[device.entityId]
+                        ?: (device.attributes["temperature"] as? Number)?.toFloat()
+                        ?: (device.attributes["target_temperature"] as? Number)?.toFloat()
+                        ?: device.targetTemperature
+                        ?: 21.0f
 
-                                        sensoryPickerTargetMode = null
-                                    }
-                                    .padding(12.dp)
-                            ) {
-                                Text(sensorId, color = currentTextColor, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                            }
+                    val isPowerOn = device.state.lowercase() != "off"
+
+                    // --- Dynamic Theme Calculations ---
+                    // Determines card background dynamically (White for Light Theme, Dark Surface for Dark Theme)
+                    val cardSurfaceColor = remember(currentBgColor) {
+                        if (currentBgColor.red > 0.5f && currentBgColor.green > 0.5f && currentBgColor.blue > 0.5f) {
+                            Color.White // Light Theme Card Surface
+                        } else {
+                            Color(0xFF161B22) // Dark Theme Card Surface
                         }
                     }
 
-                    Box(
+                    val inactivePillBg = remember(currentBgColor) {
+                        if (currentBgColor.red > 0.5f && currentBgColor.green > 0.5f && currentBgColor.blue > 0.5f) {
+                            Color(0xFFEEEEEE) // Light Theme OFF Button Surface
+                        } else {
+                            Color(0xFF2A2E3D) // Dark Theme OFF Button Surface
+                        }
+                    }
+
+                    // --- Calculate Heating Status ---
+                    val hvacAction = (device.attributes["hvac_action"] as? String
+                        ?: device.attributes["action"] as? String
+                        ?: device.attributes["current_action"] as? String)?.lowercase() ?: ""
+
+                    val isExplicitlyHeating = hvacAction == "heating" || hvacAction == "heating_up"
+                    val isDemandHeating = hvacAction.isBlank() && isPowerOn && (targetTemp > currentTemp)
+                    val isActivelyHeating = (isExplicitlyHeating || isDemandHeating) && isPowerOn
+
+                    // Dynamic Climate Card
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
-                            .background(textMuted.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                            .clickable { sensoryPickerTargetMode = null },
-                        contentAlignment = Alignment.Center
+                            .clickable {
+                                triggerInterfaceFeedback()
+                                onDrillRoom(index)
+                            },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = cardSurfaceColor),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                     ) {
-                        Text("ABORT ASSIGNMENT", color = textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = displayName.uppercase(),
+                                    color = currentTextColor,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Text(
+                                    text = "TARGET: ${"%.1f".format(targetTemp)}°C  |  CURRENT: ${"%.1f".format(currentTemp)}°C",
+                                    color = textMuted,
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+
+                                // Heating Status Indicator
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .background(
+                                                color = if (isActivelyHeating) Color(0xFFFF5252) else textMuted.copy(alpha = 0.3f),
+                                                shape = androidx.compose.foundation.shape.CircleShape
+                                            )
+                                    )
+                                    Text(
+                                        text = if (isActivelyHeating) "HEATING: ACTIVE" else "HEATING: IDLE",
+                                        color = if (isActivelyHeating) Color(0xFFD32F2F) else textMuted.copy(alpha = 0.7f),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+
+                            // Dynamic Cyber Pill Switch
+                            Box(
+                                modifier = Modifier
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                                    .background(if (isPowerOn) neonGreen.copy(alpha = 0.2f) else inactivePillBg)
+                                    .clickable {
+                                        triggerInterfaceFeedback()
+                                        onToggleClimateState(device.entityId, !isPowerOn)
+                                    }
+                                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isPowerOn) "ON" else "OFF",
+                                    color = if (isPowerOn) neonGreen else textMuted,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -348,775 +485,616 @@ fun ClimateControlTab(
     }
 }
 
-// =====================================================================
-// SUB-COMPOSABLE COMPONENT TO ESCAPE 64KB METHOD JVM BYTES LIMIT
-// =====================================================================
 @Composable
-fun IsolatedClimateConsole(
-    roomName: String,
-    deviceList: List<SmartDevice>,
-    haClient: HomeAssistantClient?,
-    onDrillRoom: (Int?) -> Unit,
-    roomTargetStates: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Float>,
-    roomMappings: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Pair<String, String>>,
-    roomScheduleEnabledStates: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>,
-    mockRoomSchedules: androidx.compose.runtime.snapshots.SnapshotStateMap<String, List<ClimateScheduleSlot>>,
-    roomSyncCooldowns: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Long>,
+fun HardwareThermostatView(
+    currentTemp: Float,
+    targetTemp: Float,
+    humidity: Int,
+    isHeatingMode: Boolean,
+    isActivelyHeating: Boolean,
+    isPowerOn: Boolean,
+    currentPreset: String, // Pass active preset from HA
+    isScheduleActive: Boolean,
+    scheduleEntity: SmartDevice?,
     currentBgColor: Color,
     currentTextColor: Color,
     neonCyan: Color,
-    neonGreen: Color,
     textMuted: Color,
-    triggerInterfaceFeedback: () -> Unit,
-    onOpenSensorPicker: (String) -> Unit
+    haIPAddress: String,
+    schedulePath: String = "heating-schedule",
+    onPowerClick: () -> Unit,
+    onDecreaseTemp: () -> Unit,
+    onIncreaseTemp: () -> Unit,
+    onCyclePreset: () -> Unit, // Callback to trigger next preset in HA
+    onOpenSchedule: () -> Unit,
+    onToggleSchedule: () -> Unit
 ) {
-    val (tempEntityId, humidityEntityId) = roomMappings[roomName] ?: Pair("", "")
-    val rTemp = deviceList.find { it.entityId == tempEntityId }?.state?.toFloatOrNull() ?: 0.0f
-    val rHum = deviceList.find { it.entityId == humidityEntityId }?.state ?: "--"
-    val activeRoomTarget = roomTargetStates[roomName] ?: 21.0f
+    var showScheduleDialog by remember { mutableStateOf(false) }
+    var isHoldMode by remember { mutableStateOf(false) }
+    val activeOrange = Color(0xFFE0562D)
 
-    var isEditingName by remember { mutableStateOf(false) }
-    var nameDraftText by remember { mutableStateOf("") }
-    var showSchedulerSubmenu by remember { mutableStateOf(false) }
-    var showDeleteConfirmation by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isEditingName) {
-        if (isEditingName) nameDraftText = roomName
-    }
-
-    LaunchedEffect(roomName) {
-        isEditingName = false
-        showDeleteConfirmation = false
-    }
-
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Navigation Link Button
-        Row(
-            modifier = Modifier
-                .clickable { onDrillRoom(null) }
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("← BACK", color = neonCyan, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-        }
-
-        // MAIN ADVANCED CONSOLE CARD WINDOW
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(currentBgColor)
+    ) {
+        // =========================================================================
+        // 1. TOP SECTION: Status Header & Temperature Dial
+        // =========================================================================
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(currentBgColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                .border(2.dp, neonCyan, RoundedCornerShape(16.dp))
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+                .padding(top = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("ADVANCED CLIMATE CONTROLS", color = neonCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-
-            // Room Title Header Block
-            Column {
-                if (isEditingName) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        androidx.compose.foundation.text.BasicTextField(
-                            value = nameDraftText,
-                            onValueChange = { nameDraftText = it },
-                            textStyle = TextStyle(color = currentTextColor, fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
-                            cursorBrush = androidx.compose.ui.graphics.SolidColor(neonCyan),
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(currentBgColor.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                                .border(1.dp, neonCyan.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                                .padding(8.dp)
-                        )
-                        Text(
-                            text = "✔",
-                            color = neonGreen,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.clickable {
-                                triggerInterfaceFeedback()
-                                val cleanDraft = nameDraftText.trim()
-                                if (cleanDraft.isNotBlank() && cleanDraft != roomName) {
-                                    val oldSlug = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                    val newSlug = cleanDraft.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-
-                                    haClient?.renameHelperEntity(oldSlug, newSlug, cleanDraft, "target")
-                                    haClient?.renameHelperEntity(oldSlug, newSlug, cleanDraft, "schedule")
-                                    haClient?.renameHelperEntity(oldSlug, newSlug, cleanDraft, "sensors")
-
-                                    onDrillRoom(null)
-                                }
-                                isEditingName = false
-                            }
-                        )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .combinedClickable(
-                                onClick = { },
-                                onLongClick = { triggerInterfaceFeedback(); isEditingName = true }
-                            )
-                    ) {
-                        Text(roomName, color = currentTextColor, fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    }
-                }
-                Text("ZONE.${roomName.replace(" ", "_").uppercase()}", color = textMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            }
-
-            // 1. TOP INTERACTIVE SECTION: SETPOINT READOUT + STACKED BUTTONS
+            // Header status row (Online & Active Status Indicator above dial)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(currentBgColor.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
-                    .border(1.dp, textMuted.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
-                    .padding(14.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text("TARGET SETPOINT", color = neonCyan, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                    Text(
-                        text = "${String.format("%.1f", activeRoomTarget)}°C",
-                        color = currentTextColor,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 52.dp, height = 34.dp)
-                            .background(neonCyan.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
-                            .border(1.dp, neonCyan.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                            .clickable {
-                                triggerInterfaceFeedback()
-                                val newTarget = activeRoomTarget + 0.5f
-                                roomTargetStates[roomName] = newTarget
-
-                                val dynamicSlug = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                haClient?.setInputNumberHelperValue(
-                                    entityId = "input_number.${dynamicSlug}_target",
-                                    value = newTarget
-                                )
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("▲", color = neonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(width = 52.dp, height = 34.dp)
-                            .background(textMuted.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
-                            .border(1.dp, textMuted.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                            .clickable {
-                                triggerInterfaceFeedback()
-                                val newTarget = activeRoomTarget - 0.5f
-                                roomTargetStates[roomName] = newTarget
-
-                                val dynamicSlug = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                haClient?.setInputNumberHelperValue(
-                                    entityId = "input_number.${dynamicSlug}_target",
-                                    value = newTarget
-                                )
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("▼", color = currentTextColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
+                Text(
+                    text = "● ONLINE",
+                    color = neonCyan,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+                Text(
+                    text = when {
+                        !isPowerOn -> "POWER OFF"
+                        isActivelyHeating -> "HEATING ACTIVE"
+                        else -> "TARGET REACHED"
+                    },
+                    color = if (isPowerOn) activeOrange else textMuted,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
             }
 
-            // 2. BOTTOM TELEMETRY SECTION
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(currentBgColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("AMBIENT TEMPERATURE", color = textMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                    Text(
-                        text = if (tempEntityId.isNotEmpty()) "${String.format("%.1f", rTemp)}°C" else "N/A",
-                        color = currentTextColor,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-
-                androidx.compose.material3.HorizontalDivider(color = textMuted.copy(alpha = 0.1f), thickness = 1.dp)
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("RELATIVE HUMIDITY", color = textMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                    val formattedHumidity = remember(rHum) {
-                        val numericHum = rHum.toFloatOrNull()
-                        if (numericHum != null) "${numericHum.toInt()}%" else "N/A"
-                    }
-                    Text(
-                        text = if (humidityEntityId.isNotEmpty() && rHum != "--") formattedHumidity else "N/A",
-                        color = currentTextColor,
-                        fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
-
-            // 2.5 CLIMATE SCHEDULER SYSTEM
+            // Temp Dial (Shifted to Top)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp)
-                    .background(currentBgColor.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
-                    .border(1.dp, textMuted.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                    .clickable { triggerInterfaceFeedback(); showSchedulerSubmenu = !showSchedulerSubmenu }
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.CenterStart
+                    .height(240.dp)
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Heating Scheduler", color = textMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                    Text(if (showSchedulerSubmenu) "CLOSE ▲" else "OPEN ▼", color = neonCyan, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                }
+                ThermostatDial(
+                    currentTemp = currentTemp,
+                    targetTemp = targetTemp,
+                    isActivelyHeating = isActivelyHeating,
+                    currentTextColor = currentTextColor,
+                    neonCyan = neonCyan,
+                    textMuted = textMuted,
+                    activeOrange = activeOrange
+                )
             }
+        }
 
-            if (showSchedulerSubmenu) {
-                var activePickerSlotId by remember { mutableStateOf<String?>(null) }
-                var activePickerCurrentTime by remember { mutableStateOf("12:00") }
-
-                val activeSchedule = mockRoomSchedules[roomName] ?: emptyList()
-                val isScheduleEnabled = roomScheduleEnabledStates[roomName] ?: true
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                ) {
-                    // MASTER AUTOMATION OVERRIDE SWITCH
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(if (isScheduleEnabled) neonCyan.copy(alpha = 0.05f) else Color.Red.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
-                            .border(1.dp, if (isScheduleEnabled) neonCyan.copy(alpha = 0.2f) else Color.Red.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                            .clickable {
-                                triggerInterfaceFeedback()
-                                val nextState = !isScheduleEnabled
-                                roomScheduleEnabledStates[roomName] = nextState
-
-                                val dynamicSlug = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                val targetRegex = Regex("^input_text\\.${dynamicSlug}_schedule(?:_\\d+)?$", RegexOption.IGNORE_CASE)
-                                val actualEntityId = deviceList.find { it.entityId.matches(targetRegex) }?.entityId
-                                    ?: "input_text.${dynamicSlug}_schedule"
-
-                                haClient?.updateRoomScheduleMatrix(
-                                    entityId = actualEntityId,
-                                    slots = activeSchedule,
-                                    isEngineEnabled = nextState
-                                )
-                            }
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (isScheduleEnabled) "CRON ENGINE: ACTIVE" else "CRON ENGINE: BYPASSED",
-                                color = if (isScheduleEnabled) neonCyan else Color.Red,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                            Text(
-                                text = if (isScheduleEnabled) "System executing target timeline parameters" else "System locked to manual setpoint override",
-                                color = textMuted,
-                                fontSize = 9.sp,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .size(width = 68.dp, height = 24.dp)
-                                .background(if (isScheduleEnabled) neonCyan.copy(alpha = 0.15f) else Color.Red.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                .border(1.dp, if (isScheduleEnabled) neonCyan else Color.Red, RoundedCornerShape(4.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (isScheduleEnabled) "RUNNING" else "MUTED",
-                                color = if (isScheduleEnabled) neonCyan else Color.Red,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                    }
-
-                    // TIMELINE ROWS
-                    if (activeSchedule.isEmpty()) {
-                        Text(
-                            text = "NO RUNTIME PROFILE DETECTED. SYSTEM RUNS PASSIVE MANUAL TARGETS.",
-                            color = textMuted.copy(alpha = 0.6f),
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    } else {
-                        val alphaModifier = if (isScheduleEnabled) 1.0f else 0.4f
-
-                        activeSchedule.sortedWith(compareBy({ it.dayTarget }, { it.time })).forEach { slot ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(textMuted.copy(alpha = 0.15f * alphaModifier))
-                            )
-
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(width = 50.dp, height = 24.dp)
-                                                .background(
-                                                    if (slot.isHeatingOn) neonGreen.copy(alpha = 0.12f * alphaModifier) else textMuted.copy(alpha = 0.1f * alphaModifier),
-                                                    RoundedCornerShape(4.dp)
-                                                )
-                                                .border(1.dp, (if (slot.isHeatingOn) neonGreen else textMuted).copy(alpha = alphaModifier), RoundedCornerShape(4.dp))
-                                                .clickable(enabled = isScheduleEnabled) {
-                                                    triggerInterfaceFeedback()
-                                                    val updatedList = activeSchedule.map {
-                                                        if (it.id == slot.id) it.copy(isHeatingOn = !it.isHeatingOn) else it
-                                                    }
-                                                    roomSyncCooldowns[roomName] = System.currentTimeMillis()
-                                                    mockRoomSchedules[roomName] = updatedList
-
-                                                    val dynamicSlug = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                                    val targetRegex = Regex("^input_text\\.${dynamicSlug}_schedule(?:_\\d+)?$", RegexOption.IGNORE_CASE)
-                                                    val actualEntityId = deviceList.find { it.entityId.matches(targetRegex) }?.entityId
-                                                        ?: "input_text.${dynamicSlug}_schedule"
-
-                                                    haClient?.updateRoomScheduleMatrix(
-                                                        entityId = actualEntityId,
-                                                        slots = updatedList,
-                                                        isEngineEnabled = isScheduleEnabled
-                                                    )
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = if (slot.isHeatingOn) "ON" else "OFF",
-                                                color = (if (slot.isHeatingOn) neonGreen else textMuted).copy(alpha = alphaModifier),
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                fontFamily = FontFamily.Monospace
-                                            )
-                                        }
-
-                                        Row(
-                                            modifier = Modifier
-                                                .background(textMuted.copy(alpha = 0.05f * alphaModifier), RoundedCornerShape(4.dp))
-                                                .border(1.dp, textMuted.copy(alpha = 0.15f * alphaModifier), RoundedCornerShape(4.dp))
-                                                .clickable(enabled = isScheduleEnabled) {
-                                                    triggerInterfaceFeedback()
-                                                    activePickerSlotId = slot.id
-                                                    activePickerCurrentTime = slot.time
-                                                }
-                                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text("⏱", color = textMuted.copy(alpha = alphaModifier), fontSize = 11.sp)
-                                            Text(slot.time, color = currentTextColor.copy(alpha = alphaModifier), fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                                        }
-                                    }
-
-                                    Text(
-                                        text = "✕",
-                                        color = Color.Red.copy(alpha = 0.6f * alphaModifier),
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier
-                                            .clickable(enabled = isScheduleEnabled) {
-                                                triggerInterfaceFeedback()
-                                                val updatedList = activeSchedule.filter { it.id != slot.id }
-                                                roomSyncCooldowns[roomName] = System.currentTimeMillis()
-                                                mockRoomSchedules[roomName] = updatedList
-
-                                                val dynamicSlug = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                                val targetRegex = Regex("^input_text\\.${dynamicSlug}_schedule(?:_\\d+)?$", RegexOption.IGNORE_CASE)
-                                                val actualEntityId = deviceList.find { it.entityId.matches(targetRegex) }?.entityId
-                                                    ?: "input_text.${dynamicSlug}_schedule"
-
-                                                haClient?.updateRoomScheduleMatrix(
-                                                    entityId = actualEntityId,
-                                                    slots = updatedList,
-                                                    isEngineEnabled = isScheduleEnabled
-                                                )
-                                            }
-                                            .padding(horizontal = 6.dp)
-                                    )
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .background(neonCyan.copy(alpha = 0.08f * alphaModifier), RoundedCornerShape(4.dp))
-                                            .border(1.dp, neonCyan.copy(alpha = 0.3f * alphaModifier), RoundedCornerShape(4.dp))
-                                            .clickable(enabled = isScheduleEnabled) {
-                                                triggerInterfaceFeedback()
-                                                val dayCycles = listOf("WEEKDAYS", "WEEKENDS", "EVERYDAY", "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
-                                                val nextIdx = (dayCycles.indexOf(slot.dayTarget) + 1) % dayCycles.size
-
-                                                val updatedList = activeSchedule.map {
-                                                    if (it.id == slot.id) it.copy(dayTarget = dayCycles[nextIdx]) else it
-                                                }
-                                                mockRoomSchedules[roomName] = updatedList
-
-                                                val dynamicSlug = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                                val targetRegex = Regex("^input_text\\.${dynamicSlug}_schedule(?:_\\d+)?$", RegexOption.IGNORE_CASE)
-                                                val actualEntityId = deviceList.find { it.entityId.matches(targetRegex) }?.entityId
-                                                    ?: "input_text.${dynamicSlug}_schedule"
-
-                                                haClient?.updateRoomScheduleMatrix(
-                                                    entityId = actualEntityId,
-                                                    slots = updatedList,
-                                                    isEngineEnabled = isScheduleEnabled
-                                                )
-                                            }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(slot.dayTarget, color = neonCyan.copy(alpha = alphaModifier), fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                                    }
-
-                                    if (slot.isHeatingOn) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Text(
-                                                text = "—",
-                                                color = neonCyan.copy(alpha = alphaModifier),
-                                                fontSize = 16.sp,
-                                                fontWeight = FontWeight.Black,
-                                                modifier = Modifier.clickable(enabled = isScheduleEnabled) {
-                                                    triggerInterfaceFeedback()
-                                                    val updatedList = activeSchedule.map {
-                                                        if (it.id == slot.id) it.copy(targetTemp = it.targetTemp - 0.5f) else it
-                                                    }
-                                                    roomSyncCooldowns[roomName] = System.currentTimeMillis()
-                                                    mockRoomSchedules[roomName] = updatedList
-
-                                                    val dynamicSlug = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                                    val targetRegex = Regex("^input_text\\.${dynamicSlug}_schedule(?:_\\d+)?$", RegexOption.IGNORE_CASE)
-                                                    val actualEntityId = deviceList.find { it.entityId.matches(targetRegex) }?.entityId
-                                                        ?: "input_text.${dynamicSlug}_schedule"
-
-                                                    haClient?.updateRoomScheduleMatrix(
-                                                        entityId = actualEntityId,
-                                                        slots = updatedList,
-                                                        isEngineEnabled = isScheduleEnabled
-                                                    )
-                                                }.padding(horizontal = 6.dp)
-                                            )
-
-                                            Text(
-                                                text = "${String.format("%.1f", slot.targetTemp)}°C",
-                                                color = neonCyan.copy(alpha = alphaModifier),
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                fontFamily = FontFamily.Monospace,
-                                                maxLines = 1
-                                            )
-
-                                            Text(
-                                                text = "+",
-                                                color = neonCyan.copy(alpha = alphaModifier),
-                                                fontSize = 18.sp,
-                                                fontWeight = FontWeight.Black,
-                                                modifier = Modifier.clickable(enabled = isScheduleEnabled) {
-                                                    triggerInterfaceFeedback()
-                                                    val updatedList = activeSchedule.map {
-                                                        if (it.id == slot.id) it.copy(targetTemp = it.targetTemp + 0.5f) else it
-                                                    }
-                                                    roomSyncCooldowns[roomName] = System.currentTimeMillis()
-                                                    mockRoomSchedules[roomName] = updatedList
-
-                                                    val dynamicSlug = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                                    val targetRegex = Regex("^input_text\\.${dynamicSlug}_schedule(?:_\\d+)?$", RegexOption.IGNORE_CASE)
-                                                    val actualEntityId = deviceList.find { it.entityId.matches(targetRegex) }?.entityId
-                                                        ?: "input_text.${dynamicSlug}_schedule"
-
-                                                    haClient?.updateRoomScheduleMatrix(
-                                                        entityId = actualEntityId,
-                                                        slots = updatedList,
-                                                        isEngineEnabled = isScheduleEnabled
-                                                    )
-                                                }.padding(horizontal = 6.dp)
-                                            )
-                                        }
-                                    } else {
-                                        Text(
-                                            text = "CHANNEL INACTIVE",
-                                            color = textMuted.copy(alpha = 0.35f * alphaModifier),
-                                            fontSize = 10.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Append New Matrix Element Trigger
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(36.dp)
-                            .background(neonCyan.copy(alpha = if (isScheduleEnabled) 0.05f else 0.01f), RoundedCornerShape(6.dp))
-                            .border(1.dp, neonCyan.copy(alpha = if (isScheduleEnabled) 0.3f else 0.05f), RoundedCornerShape(6.dp))
-                            .clickable(enabled = isScheduleEnabled) {
-                                triggerInterfaceFeedback()
-                                val fallbackSlot = ClimateScheduleSlot(
-                                    id = java.util.UUID.randomUUID().toString(),
-                                    time = "12:00",
-                                    targetTemp = 20.0f,
-                                    isHeatingOn = true,
-                                    dayTarget = "WEEKDAYS"
-                                )
-
-                                val updatedList = activeSchedule + fallbackSlot
-                                roomSyncCooldowns[roomName] = System.currentTimeMillis()
-                                mockRoomSchedules[roomName] = updatedList
-
-                                val dynamicSlug = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                val targetRegex = Regex("^input_text\\.${dynamicSlug}_schedule(?:_\\d+)?$", RegexOption.IGNORE_CASE)
-                                val actualEntityId = deviceList.find { it.entityId.matches(targetRegex) }?.entityId
-                                    ?: "input_text.${dynamicSlug}_schedule"
-
-                                haClient?.updateRoomScheduleMatrix(
-                                    entityId = actualEntityId,
-                                    slots = updatedList,
-                                    isEngineEnabled = isScheduleEnabled
-                                )
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "+ APPEND NEW TIMELINE TRIGGER",
-                            color = neonCyan.copy(alpha = if (isScheduleEnabled) 1.0f else 0.2f),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-                }
-
-                // NATIVE WHEEL PICKER OVERLAY POPUP
-                if (activePickerSlotId != null) {
-                    val parsedTimeParts = activePickerCurrentTime.split(":")
-                    val initialHour = parsedTimeParts.getOrNull(0)?.toIntOrNull() ?: 12
-                    val initialMinute = parsedTimeParts.getOrNull(1)?.toIntOrNull() ?: 0
-
-                    @OptIn(ExperimentalMaterial3Api::class)
-                    val timePickerState = androidx.compose.material3.rememberTimePickerState(
-                        initialHour = initialHour,
-                        initialMinute = initialMinute,
-                        is24Hour = true
-                    )
-
-                    @OptIn(ExperimentalMaterial3Api::class)
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { activePickerSlotId = null },
-                        confirmButton = {
-                            androidx.compose.material3.TextButton(
-                                onClick = {
-                                    triggerInterfaceFeedback()
-                                    val formattedHour = timePickerState.hour.toString().padStart(2, '0')
-                                    val formattedMinute = timePickerState.minute.toString().padStart(2, '0')
-                                    val newTimeString = "$formattedHour:$formattedMinute"
-
-                                    val updatedSchedule = activeSchedule.map {
-                                        if (it.id == activePickerSlotId) it.copy(time = newTimeString) else it
-                                    }
-                                    mockRoomSchedules[roomName] = updatedSchedule
-                                    activePickerSlotId = null
-
-                                    val dynamicSlug = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
-                                    val targetRegex = Regex("^input_text\\.${dynamicSlug}_schedule(?:_\\d+)?$", RegexOption.IGNORE_CASE)
-                                    val actualEntityId = deviceList.find { it.entityId.matches(targetRegex) }?.entityId
-                                        ?: "input_text.${dynamicSlug}_schedule"
-
-                                    haClient?.updateRoomScheduleMatrix(
-                                        entityId = actualEntityId,
-                                        slots = updatedSchedule,
-                                        isEngineEnabled = roomScheduleEnabledStates[roomName] ?: true
-                                    )
-                                    activePickerSlotId = null
-                                }
-                            ) {
-                                Text("ACCEPT", color = neonCyan, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            }
-                        },
-                        dismissButton = {
-                            androidx.compose.material3.TextButton(onClick = { activePickerSlotId = null }) {
-                                Text("CANCEL", color = textMuted, fontFamily = FontFamily.Monospace)
-                            }
-                        },
-                        text = {
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                androidx.compose.material3.TimePicker(state = timePickerState)
-                            }
-                        },
-                        containerColor = currentBgColor,
-                        shape = RoundedCornerShape(16.dp)
-                    )
-                }
+        // =========================================================================
+        // 2. MIDDLE SECTION: Information Grid (Shifted Under Dial)
+        // =========================================================================
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            Row(modifier = Modifier.weight(1f)) {
+                // PRESET TILE (Cycles Presets)
+                TextGridTile(
+                    title = "PRESET",
+                    subtext = currentPreset.uppercase().ifBlank { "NONE" },
+                    isActive = currentPreset.isNotBlank() && currentPreset.lowercase() != "none",
+                    textColor = currentTextColor,
+                    accentColor = neonCyan,
+                    borderColor = textMuted.copy(alpha = 0.2f),
+                    onClick = onCyclePreset,
+                    modifier = Modifier.weight(1f)
+                )
+                // SCHEDULE TILE -> OPENS DIALOG WINDOW!
+                TextGridTile(
+                    title = "SCHEDULE",
+                    subtext = if (isScheduleActive) "ACTIVE" else "OFF",
+                    isActive = isScheduleActive,
+                    textColor = currentTextColor,
+                    accentColor = neonCyan,
+                    borderColor = textMuted.copy(alpha = 0.2f),
+                    onClick = { onOpenSchedule() }, // Opens scheduling window
+                    modifier = Modifier.weight(1f)
+                )
             }
-
-            // SECONDARY UTILITIES SUB-PACK
-            var showHardwareEngine by remember { mutableStateOf(false) }
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(38.dp)
-                        .background(currentBgColor.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
-                        .border(1.dp, textMuted.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                        .clickable { triggerInterfaceFeedback(); showHardwareEngine = !showHardwareEngine }
-                        .padding(horizontal = 12.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("HARDWARE INTEGRATION LINK", color = textMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                        Text(if (showHardwareEngine) "CLOSE ▲" else "OPEN ▼", color = neonCyan, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                    }
-                }
-
-                if (showHardwareEngine) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(40.dp)
-                                .background(currentBgColor.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                                .border(1.dp, textMuted.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
-                                .clickable { triggerInterfaceFeedback(); onOpenSensorPicker("TEMP") }
-                                .padding(horizontal = 12.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(text = tempEntityId.ifEmpty { "ATTACH TEMP SENSOR ID..." }, color = if (tempEntityId.isEmpty()) textMuted else currentTextColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(40.dp)
-                                .background(currentBgColor.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                                .border(1.dp, textMuted.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
-                                .clickable { triggerInterfaceFeedback(); onOpenSensorPicker("HUMIDITY") }
-                                .padding(horizontal = 12.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(text = humidityEntityId.ifEmpty { "ATTACH HUMIDITY SENSOR ID..." }, color = if (humidityEntityId.isEmpty()) textMuted else currentTextColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                        }
-                    }
-                }
+            Row(modifier = Modifier.weight(1f)) {
+                // HUMIDITY TILE
+                TextGridTile(
+                    title = "HUMIDITY",
+                    subtext = "$humidity%",
+                    isActive = false,
+                    textColor = currentTextColor,
+                    accentColor = neonCyan,
+                    borderColor = textMuted.copy(alpha = 0.2f),
+                    onClick = {},
+                    modifier = Modifier.weight(1f)
+                )
+                // MODE TILE
+                TextGridTile(
+                    title = "MODE",
+                    subtext = if (isHeatingMode) "HEAT" else "IDLE",
+                    isActive = isHeatingMode,
+                    textColor = currentTextColor,
+                    accentColor = activeOrange,
+                    borderColor = textMuted.copy(alpha = 0.2f),
+                    onClick = {},
+                    modifier = Modifier.weight(1f)
+                )
             }
+        }
 
-            // 3. SECURE DESTRUCTIVE PROTOCOL ACTION BOX
-            if (!showDeleteConfirmation) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(38.dp)
-                        .background(Color.Red.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
-                        .border(1.dp, Color.Red.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
-                        .clickable {
-                            triggerInterfaceFeedback()
-                            showDeleteConfirmation = true
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("PURGE CLIMATE ZONE FROM MATRIX", color = Color.Red.copy(alpha = 0.8f), fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                }
+        // =========================================================================
+        // 3. BOTTOM SECTION: Control Navigation Bar (Original Preserved)
+        // =========================================================================
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .background(currentBgColor)
+                .border(0.5.dp, textMuted.copy(alpha = 0.3f))
+        ) {
+            NavButton(
+                icon = IconPower,
+                tint = if (isPowerOn) activeOrange else textMuted,
+                borderColor = textMuted.copy(alpha = 0.3f),
+                onClick = onPowerClick,
+                modifier = Modifier.weight(1f)
+            )
+            NavButton(
+                icon = IconRemove,
+                tint = currentTextColor,
+                borderColor = textMuted.copy(alpha = 0.3f),
+                onClick = onDecreaseTemp,
+                modifier = Modifier.weight(1f)
+            )
+            NavButton(
+                icon = IconAdd,
+                tint = currentTextColor,
+                borderColor = textMuted.copy(alpha = 0.3f),
+                onClick = onIncreaseTemp,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+
+    }
+    // =========================================================================
+    // 4. DIALOG POPUP WINDOW
+    // =========================================================================
+    if (showScheduleDialog) {
+        ScheduleWindowDialog(
+            isScheduleActive = isScheduleActive,
+            scheduleEntity = scheduleEntity,
+            currentTextColor = currentTextColor,
+            currentBgColor = currentBgColor,
+            neonCyan = neonCyan,
+            textMuted = textMuted,
+            activeOrange = activeOrange,
+            haIpAddress = haIPAddress,
+            schedulePath = schedulePath,
+            onDismiss = { showScheduleDialog = false },
+            onToggleSchedule = {
+                onToggleSchedule() // Toggles HA schedule switch
+            }
+        )
+    }
+}
+
+@Composable
+private fun TextGridTile(
+    title: String,
+    subtext: String,
+    isActive: Boolean = false,
+    textColor: Color,
+    accentColor: Color,
+    borderColor: Color,
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .border(0.5.dp, borderColor)
+            .clickable { onClick() }
+            .padding(4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = title,
+                color = textColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtext,
+                color = if (isActive) accentColor else textColor.copy(alpha = 0.6f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+private fun NavButton(
+    icon: ImageVector,
+    tint: Color,
+    borderColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .border(0.5.dp, borderColor)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Composable
+private fun ThermostatDial(
+    currentTemp: Float,
+    targetTemp: Float,
+    isActivelyHeating: Boolean,
+    currentTextColor: Color,
+    neonCyan: Color,
+    textMuted: Color,
+    activeOrange: Color
+) {
+    Box(contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.size(210.dp)) {
+            val strokeWidth = 24f
+
+            // 1. Calculate TRUE Center & Radius
+            val center = Offset(size.width / 2f, size.height / 2f)
+            val radius = (size.minDimension - strokeWidth) / 2f
+
+            // 2. Derive Bounding Box TopLeft directly from true center
+            val arcTopLeft = Offset(center.x - radius, center.y - radius)
+            val arcSize = Size(radius * 2f, radius * 2f)
+
+            val startAngle = 135f
+            val sweepAngle = 270f
+
+            // Track Background Arc
+            drawArc(
+                color = textMuted.copy(alpha = 0.2f),
+                startAngle = startAngle,
+                sweepAngle = sweepAngle,
+                useCenter = false,
+                topLeft = arcTopLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+
+            // Current Temp Active Arc Fill
+            val progressPercentage = ((currentTemp - 10f) / (32f - 10f)).coerceIn(0f, 1f)
+            val currentSweep = sweepAngle * progressPercentage
+
+            drawArc(
+                color = textMuted.copy(alpha = 0.5f),
+                startAngle = startAngle,
+                sweepAngle = currentSweep,
+                useCenter = false,
+                topLeft = arcTopLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+
+            // 3. TARGET TEMP INDICATOR PIN (Now perfectly centered)
+            val targetPercentage = ((targetTemp - 10f) / (32f - 10f)).coerceIn(0f, 1f)
+            val targetAngle = startAngle + (sweepAngle * targetPercentage)
+            val angleInRadians = Math.toRadians(targetAngle.toDouble())
+
+            // Start line from inner arc edge to outer arc edge (plus slight extension pin)
+            val innerRadius = radius - (strokeWidth / 2f) - 2f
+            val outerRadius = radius + (strokeWidth / 2f) + 6f
+
+            val lineStart = Offset(
+                x = center.x + innerRadius * cos(angleInRadians).toFloat(),
+                y = center.y + innerRadius * sin(angleInRadians).toFloat()
+            )
+            val lineEnd = Offset(
+                x = center.x + outerRadius * cos(angleInRadians).toFloat(),
+                y = center.y + outerRadius * sin(angleInRadians).toFloat()
+            )
+
+            drawLine(
+                color = activeOrange,
+                start = lineStart,
+                end = lineEnd,
+                strokeWidth = 6f,
+                cap = StrokeCap.Round
+            )
+        }
+
+        // Inner Text & Temperature Readouts remain unchanged...
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (isActivelyHeating) {
+                Text(
+                    text = "🔥 HEATING",
+                    color = activeOrange,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
             } else {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            val whole = currentTemp.toInt()
+            val decimal = ((currentTemp - whole) * 10).toInt()
+
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = "$whole",
+                    fontSize = 54.sp,
+                    fontWeight = FontWeight.Light,
+                    color = currentTextColor
+                )
+                Text(
+                    text = ".$decimal",
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Light,
+                    color = currentTextColor,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                Text(
+                    text = "°C",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = currentTextColor,
+                    modifier = Modifier.padding(bottom = 22.dp, start = 2.dp)
+                )
+            }
+
+            Text(
+                text = "Room temperature",
+                fontSize = 11.sp,
+                color = textMuted
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = "%.1f".format(targetTemp),
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = neonCyan
+                )
+                Text(
+                    text = "°C",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = neonCyan,
+                    modifier = Modifier.padding(top = 2.dp, start = 1.dp)
+                )
+            }
+        }
+    }
+}
+
+
+
+@Composable
+fun ScheduleWindowDialog(
+    isScheduleActive: Boolean,
+    scheduleEntity: SmartDevice?,
+    currentTextColor: Color,
+    currentBgColor: Color,
+    neonCyan: Color,
+    textMuted: Color,
+    activeOrange: Color,
+    haIpAddress: String,
+    schedulePath: String = "schedule", // <--- Custom Dashboard Path (e.g. "schedule", "heating-schedule")
+    onDismiss: () -> Unit,
+    onToggleSchedule: () -> Unit
+) {
+    // 1. Re-enforce Immersive Mode inside the Dialog Window
+    val view = LocalView.current
+    DisposableEffect(Unit) {
+        val window = (view.parent as? DialogWindowProvider)?.window
+            ?: (view.context as? Activity)?.window
+
+        window?.let { win ->
+            val controller = WindowCompat.getInsetsController(win, view)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose {
+            // Re-hide system bars on the main app activity when closing dialog
+            (view.context as? Activity)?.window?.let { mainWin ->
+                val mainController = WindowCompat.getInsetsController(mainWin, mainWin.decorView)
+                mainController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                mainController.hide(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    // 2. Format the custom URL dynamically
+    val formattedUrl = remember(haIpAddress, schedulePath) {
+        val cleanIp = haIpAddress.trim()
+            .removePrefix("http://")
+            .removePrefix("https://")
+            .trimEnd('/')
+
+        val cleanPath = schedulePath.trim().removePrefix("/")
+
+        "http://$cleanIp/$cleanPath"
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false // <--- Prevents Compose from stealing tap events from HA popups
+        )
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFF161B22),
+            border = BorderStroke(1.dp, neonCyan.copy(alpha = 0.4f)),
+            modifier = Modifier
+                .fillMaxWidth(0.95f)  // <--- Expanded to 95% width
+                .fillMaxHeight(0.92f) // <--- Expanded to 92% height so "Add" button isn't cut off
+                .padding(4.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(12.dp)
+                    .fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header Bar
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(38.dp)
-                            .background(textMuted.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
-                            .border(1.dp, textMuted.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
-                            .clickable {
-                                triggerInterfaceFeedback()
-                                showDeleteConfirmation = false
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("CANCEL", color = currentTextColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    Text(
+                        text = "HEATING SCHEDULE",
+                        color = currentTextColor,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (isScheduleActive) "ON" else "OFF",
+                            color = if (isScheduleActive) neonCyan else textMuted,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                        Switch(
+                            checked = isScheduleActive,
+                            onCheckedChange = { onToggleSchedule() },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = neonCyan,
+                                checkedTrackColor = neonCyan.copy(alpha = 0.3f)
+                            )
+                        )
                     }
+                }
 
-                    Box(
-                        modifier = Modifier
-                            .weight(1.5f)
-                            .height(38.dp)
-                            .background(Color.Red.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                            .border(2.dp, Color.Red, RoundedCornerShape(6.dp))
-                            .clickable {
-                                triggerInterfaceFeedback()
-                                val slugToDelete = roomName.lowercase().replace(" ", "_").filter { it.isLetterOrDigit() || it == '_' }
+                Divider(color = textMuted.copy(alpha = 0.2f), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(8.dp))
 
-                                haClient?.deleteHelperEntity(slugToDelete, "target")
-                                haClient?.deleteHelperEntity(slugToDelete, "schedule")
-                                haClient?.deleteHelperEntity(slugToDelete, "sensors")
+                // Embedded Web Content
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(1.dp, textMuted.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                ) {
+                    AndroidView(
+                        factory = { context ->
+                            WebView(context).apply {
+                                // 1. Force full touch focus delegation to the WebView root
+                                isClickable = true
+                                isFocusable = true
+                                isFocusableInTouchMode = true
+                                requestFocusFromTouch()
 
-                                showDeleteConfirmation = false
-                                onDrillRoom(null)
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "CONFIRM", color = Color.Red, fontSize = 10.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace, maxLines = 1)
-                    }
+                                // 2. Disable clipping so root-level modal overlays aren't truncated
+                                clipChildren = false
+                                clipToPadding = false
+
+                                webViewClient = object : WebViewClient() {
+                                    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                                        return false
+                                    }
+                                }
+
+                                webChromeClient = object : android.webkit.WebChromeClient() {
+                                    // Ensure JS popup/modal creation isn't blocked by host app
+                                    override fun onCreateWindow(
+                                        view: WebView?,
+                                        isDialog: Boolean,
+                                        isUserGesture: Boolean,
+                                        resultMsg: android.os.Message?
+                                    ): Boolean {
+                                        val transport = resultMsg?.obj as? WebView.WebViewTransport
+                                        transport?.webView = view
+                                        resultMsg?.sendToTarget()
+                                        return true
+                                    }
+                                }
+
+                                settings.apply {
+                                    javaScriptEnabled = true
+                                    domStorageEnabled = true
+                                    databaseEnabled = true
+
+                                    // Crucial for Shadow DOM viewport calculations:
+                                    useWideViewPort = true
+                                    loadWithOverviewMode = false // Force native scale so Shadow DOM popups map 1:1 with screen pixels
+
+                                    // Allow JS window & modal creation
+                                    javaScriptCanOpenWindowsAutomatically = true
+                                    setSupportMultipleWindows(false)
+
+                                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+                                    // Standard Mobile Chrome User-Agent
+                                    userAgentString = "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                                }
+
+                                loadUrl(formattedUrl)
+                            }
+                        },
+                        update = { webView ->
+                            if (webView.url != formattedUrl) {
+                                webView.loadUrl(formattedUrl)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = neonCyan),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "DONE",
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
                 }
             }
         }
